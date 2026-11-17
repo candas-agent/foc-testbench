@@ -1,6 +1,6 @@
 # FOC test bench: PWM dead-time compensation
 
-Test bench to evaluate a PWM dead-time compensation for [SimpleFOC](https://github.com/simplefoc/Arduino-FOC) on a **B-G431B-ESC1** board driving a **hoverboard motor with hall sensors**.
+Test bench to evaluate a PWM dead-time compensation for [SimpleFOC](https://github.com/simplefoc/Arduino-FOC) on a **B-G431B-ESC1** board driving a **hoverboard motor**, in open loop (no position sensor for now).
 
 Background: the [PWM Deadtime compensation](https://community.simplefoc.com/t/pwm-deadtime-compensation/3767) thread on the SimpleFOC forum.
 
@@ -30,7 +30,7 @@ The compensation adds `±deadtime_compensation` to each phase voltage in the dir
 ## Hardware
 
 - B-G431B-ESC1 (on-board ST-Link, low-side current sensing with the STM32G4 op-amps)
-- Hoverboard motor, 15 pole pairs, hall sensors on the board's hall/encoder connector (`A_HALL1..3`)
+- Hoverboard motor, 15 pole pairs (hall sensors not connected: open loop only)
 - **Lab power supply with current limit**
 - Optional: oscilloscope
 
@@ -44,8 +44,7 @@ The phase resistance of a hoverboard motor is very low (~0.17 Ω): in open loop 
 2. Adapt [`include/config.h`](include/config.h): motor parameters and the **real measured supply voltage** (the compensation volts are converted to duty cycle with it).
 3. Build and flash:
    ```
-   pio run -e esc1_hall -t upload            # hall sensors only
-   pio run -e esc1_hall_smoothing -t upload  # hall + SmoothingSensor (angle extrapolation)
+   pio run -e esc1 -t upload
    pio device monitor
    ```
 
@@ -55,7 +54,7 @@ To check that the forked library is the one being compiled: the build fails if `
 
 ## Serial commands
 
-At start-up the motor is aligned (it moves), then runs in **velocity open loop, voltage mode, target 0**, with the compensation **disabled**.
+At start-up the motor does not move and stays **disabled** (`ME1` to enable). It is configured in **velocity open loop, voltage mode, target 0**, with the compensation **disabled**. Without position sensor only the open loop motion controls are allowed (`MC3` velocity, `MC4` angle); in open loop the voltage (or current) is applied even at target 0, so disable the motor when not testing to avoid heating.
 
 ### Dead-time compensation (`D`)
 
@@ -75,9 +74,9 @@ At start-up the motor is aligned (it moves), then runs in **velocity open loop, 
 |---|---|
 | `M2` | target (rad/s in velocity modes) |
 | `ME0` / `ME1` | disable / enable the motor |
-| `MC3` | velocity open loop (`MC1` velocity closed loop, `MC0` torque) |
-| `MT0` / `MT2` | voltage / foc_current torque mode |
-| `MLC1.5` | current limit |
+| `MC3` / `MC4` | velocity / angle open loop (closed loop modes are refused, no sensor) |
+| `MT0` / `MT2` | voltage mode / current control (foc_current in the open loop frame) |
+| `MLC1.5` | current limit, also the current amplitude in open loop with `MT2` |
 
 In open loop (voltage mode) the voltage limit is managed by the test bench (`DB`, `DE`); in the other modes it is set to `FOC_VOLTAGE_LIMIT`.
 
@@ -100,10 +99,11 @@ All useful values are grouped in the global `dbg` structure:
 
 ## Test procedure
 
-1. **Calibration** (open loop, motor still): `DC1.5`, note the value and the ratio to `Vbus × dead_zone`.
-2. **Open loop** at low speed, e.g. `M2`: record `dbg.ia` with `D0`, then with the calibrated value (`DE1` for the same amplitude). The plateau around zero should disappear.
-3. **foc_current with hall sensors** (`MT2`, `MC1`): same comparison, then the zero torque test (`MC0`, `M0`, turn the wheel by hand, there should be no vibration).
-4. Same with the `esc1_hall_smoothing` firmware.
+1. **Calibration** (motor still): `DC1.5`, note the value and the ratio to `Vbus × dead_zone`.
+2. **Open loop, voltage mode** (`MT0`) at low speed, e.g. `ME1` then `M2`: record `dbg.ia` with `D0`, then with the calibrated value (`DE1` for the same amplitude). The plateau around zero should disappear.
+3. **Open loop with current control** (`MT2`): the current is regulated to `current_limit` in the open loop frame. Compare `D0`, compensation with setpoints (`DM0`) and with measured currents (`DM1`, threshold above `compensation / R`).
+
+Later, with position sensors (hall sensors to be soldered, or an encoder): foc_current in closed loop, the zero torque test (turn the wheel by hand at zero torque, there should be no vibration), and the MXLEMMING sensorless observer.
 
 Log the results in [`docs/test-log.md`](docs/test-log.md).
 

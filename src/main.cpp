@@ -1,30 +1,20 @@
 /**
- * FOC test bench: PWM dead-time compensation on a B-G431B-ESC1 with a hoverboard motor (hall sensors)
+ * FOC test bench: PWM dead-time compensation on a B-G431B-ESC1 with a hoverboard motor (no sensor)
  *
- * - starts in velocity open loop (voltage mode), target 0, compensation disabled
+ * - no position sensor: only open loop control (velocity/angle), in voltage mode or with
+ *   current control (foc_current in the open loop frame)
+ * - starts with the motor DISABLED, velocity open loop, voltage mode, target 0, compensation disabled
  * - everything can be changed at runtime through the serial Commander (see README)
  * - the variables to watch with MCUViewer are grouped in the global `dbg` structure
  */
 #include <Arduino.h>
 #include <SimpleFOC.h>
-#ifdef USE_SMOOTHING_SENSOR
-#include "encoders/smoothing/SmoothingSensor.h"
-#endif
 #include "config.h"
 
 BLDCMotor motor = BLDCMotor(POLE_PAIRS, PHASE_RESISTANCE, KV_RATING, PHASE_INDUCTANCE);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
 // gain calculation: https://community.simplefoc.com/t/b-g431b-esc1-current-control/521/21
 LowsideCurrentSense currentSense = LowsideCurrentSense(0.003f, -64.0f / 7.0f, A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
-HallSensor hall = HallSensor(A_HALL1, A_HALL2, A_HALL3, POLE_PAIRS);
-#ifdef USE_SMOOTHING_SENSOR
-SmoothingSensor smooth = SmoothingSensor(hall, motor);
-#endif
-
-void doA() { hall.handleA(); }
-void doB() { hall.handleB(); }
-void doC() { hall.handleC(); }
-
 Commander command = Commander(Serial);
 
 // ---------------------------------------------------------------------------
@@ -168,23 +158,21 @@ void doDeadtime(char* cmd) {
   }
 }
 
-void doMotor(char* cmd) { command.motor(&motor, cmd); }
+void doMotor(char* cmd) {
+  command.motor(&motor, cmd);
+  // no position sensor: only the open loop motion controls are possible
+  if (!isOpenLoop()) {
+    motor.controller = MotionControlType::velocity_openloop;
+    Serial.println(F("No sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   SimpleFOCDebug::enable(&Serial);
   _delay(1000);
 
-  // hall sensors
-  hall.pullup = Pullup::USE_INTERN;
-  hall.init();
-  hall.enableInterrupts(doA, doB, doC);
-#ifdef USE_SMOOTHING_SENSOR
-  motor.linkSensor(&smooth);
-#else
-  motor.linkSensor(&hall);
-#endif
-
+  // no position sensor linked: open loop only
   // driver
   driver.voltage_power_supply = SUPPLY_VOLTAGE;
   driver.pwm_frequency = PWM_FREQUENCY;
@@ -199,7 +187,7 @@ void setup() {
   motor.linkCurrentSense(&currentSense);
 
   // limits
-  motor.voltage_sensor_align = ALIGN_VOLTAGE;
+  motor.voltage_sensor_align = ALIGN_VOLTAGE;  // used by the dead-time calibration to align the rotor
   motor.voltage_limit = FOC_VOLTAGE_LIMIT;  // used for the current PI limits in init()
   motor.current_limit = CURRENT_LIMIT;
   motor.velocity_limit = VELOCITY_LIMIT;
@@ -208,9 +196,6 @@ void setup() {
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
   motor.torque_controller = TorqueControlType::voltage;
   motor.controller = MotionControlType::velocity_openloop;
-  motor.PID_velocity.P = VELOCITY_P;
-  motor.PID_velocity.I = VELOCITY_I;
-  motor.LPF_velocity.Tf = VELOCITY_LPF_TF;
   motor.LPF_current_q.Tf = CURRENT_LPF_TF;
   motor.LPF_current_d.Tf = CURRENT_LPF_TF;
 
@@ -224,17 +209,19 @@ void setup() {
 
   motor.init();
   motor.tuneCurrentController(CURRENT_BANDWIDTH);
-  // aligns the hall sensors (the motor moves)
+  // no sensor and current sense alignment skipped: the motor does not move here
   motor.initFOC();
 
   motor.target = 0;
   updateVoltageLimit();
+  // start disabled: in open loop the voltage/current is applied even at target 0 (heating)
+  motor.disable();
 
   command.add('M', doMotor, "motor");
   command.add('D', doDeadtime, "deadtime comp");
   command.verbose = VerboseMode::user_friendly;
 
-  Serial.println(F("Ready. Open loop, target 0. 'D' prints the dead-time settings."));
+  Serial.println(F("Ready, motor DISABLED (ME1 to enable). Velocity open loop, target 0. 'D' prints the dead-time settings."));
 }
 
 void loop() {
