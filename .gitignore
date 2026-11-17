@@ -4,3 +4,4 @@
 *.csv
 !docs/**/*.png
 __pycache__/
+data/

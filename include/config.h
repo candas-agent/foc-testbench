@@ -29,3 +29,13 @@
 #define DEADTIME_COMP       0.0f    // [V]
 #define DEADTIME_THRESHOLD  0.2f    // [A]
 #define CALIB_MAX_CURRENT   1.5f    // [A] default max current for the dead-time calibration
+
+// Safety
+#define RUN_TIMEOUT_S         30      // [s] the motor is disabled after this time enabled (0 = no timeout)
+#define OVERCURRENT_A         4.0f    // [A] any phase above this for OVERCURRENT_SAMPLES consecutive loops -> disable
+#define OVERCURRENT_SAMPLES   10
+#define HEARTBEAT_TIMEOUT_MS  2000    // [ms] when the heartbeat is on (XH1), disable if no command received for this time
+#define CALIB_MAX_CURRENT_LIMIT 2.0f  // [A] the calibration current is clamped to this value
+
+// Recorder (R command): samples stored in RAM then dumped as CSV over serial
+#define RECORD_SAMPLES        1000

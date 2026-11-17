@@ -12,7 +12,14 @@ connected for now: open loop only.
 - The firmware starts with the motor disabled; disable it again (`ME0`) after each test: in open loop the current flows even at target 0.
 - If the serial output shows an error or the behaviour is unexpected, disable the motor (`ME0`) before investigating.
 
+- `pio test -e esc1 -f test_motor` and `tools/campaign.py` make the motor move: ask for confirmation before each run,
+  and only when the user says they are next to the bench. `test_static` does not move the motor but still flashes the board.
+- Keep the safety features (run timeout, overcurrent cut, heartbeat) enabled; never weaken them without asking.
+
 ## Workflow
 - Build: `pio run -e esc1`, flash: `pio run -e esc1 -t upload`.
+- Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
+- Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).
+- Hardware setup, safety and recorder code: lib/testbench (shared by src/main.cpp and the tests).
 - Serial: 115200 baud through the ST-Link virtual COM port. Commands are documented in README.md.
 - Record results in docs/test-log.md.

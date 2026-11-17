@@ -80,11 +80,26 @@ At start-up the motor does not move and stays **disabled** (`ME1` to enable). It
 
 In open loop (voltage mode) the voltage limit is managed by the test bench (`DB`, `DE`); in the other modes it is set to `FOC_VOLTAGE_LIMIT`.
 
+### Safety (`X`), recorder (`R`), heartbeat (`P`)
+
+| Command | Action |
+|---|---|
+| `X` | print the safety settings and the last fault (1 timeout, 2 overcurrent, 3 heartbeat) |
+| `XT30` | run timeout [s]: the motor is disabled after this time enabled (0 = none) |
+| `XI4` | overcurrent threshold [A] on any phase |
+| `XH1` / `XH0` | heartbeat on/off: the motor is disabled if no command arrives for 2 s |
+| `XC` | clear the last fault |
+| `R838` | record 1000 samples of phase A current every 838 µs, then disable the motor and dump them as CSV |
+| `RD` | dump the last recording again |
+| `P` | ping (silent), keeps the heartbeat alive |
+
+Defaults are in [`include/config.h`](include/config.h). The calibration current is clamped to `CALIB_MAX_CURRENT_LIMIT` (2 A).
+
 ## Watching the variables (MCUViewer)
 
 [MCUViewer](https://github.com/klonyyy/MCUViewer) reads the variables through the ST-Link without slowing down the loop. Point it to `.pio/build/<env>/firmware.elf`.
 
-All useful values are grouped in the global `dbg` structure:
+All useful values are grouped in the global `dbg` structure (defined in [`lib/testbench`](lib/testbench/src/bench.h), shared by the firmware and the tests):
 
 | Variable | Content |
 |---|---|
@@ -107,9 +122,39 @@ Later, with position sensors (hall sensors to be soldered, or an encoder): foc_c
 
 Log the results in [`docs/test-log.md`](docs/test-log.md).
 
+## Automated tests (`pio test`)
+
+The tests run on the board, PlatformIO flashes them and collects the results over serial.
+
+```
+pio test -e esc1 -f test_static   # the motor does NOT move
+pio test -e esc1 -f test_motor    # THE MOTOR MOVES
+```
+
+| Suite | Test | Checks |
+|---|---|---|
+| `test_static` | `test_current_offset` | current sense offsets < 0.1 A with the driver disabled |
+| | `test_compensation_sign` | the voltage added on each phase follows the phase current direction and the ramp (driver disabled, only the computed voltages are compared) |
+| `test_motor` | `test_calibration` | 3 calibrations, spread < 15 %, ratio to `Vbus × dead_zone` between 0.25 and 4 |
+| | `test_openloop_voltage` | open loop voltage mode at 2 rad/s: the zero crossing plateau is smaller with the calibrated compensation |
+| | `test_openloop_current` | same with current control (foc_current in the open loop frame) |
+
+The run timeout and the overcurrent cut stay active during the tests.
+
+## Measurement campaign
+
+`tools/campaign.py` drives the firmware over serial: for each torque mode, speed and compensation value it runs the motor, records the phase A current on the board, saves the CSV files, a summary table and one comparison plot per mode and speed. The heartbeat is enabled, so the board disables the motor if the script stops.
+
+```
+pip install -r tools/requirements.txt
+python tools/campaign.py --port COM5 --speeds 1 2 4 --comps 0 cal --modes voltage current
+```
+
+`--comps` takes values in volts and `cal` (runs the calibration first). Results go to `data/<date-time>/`.
+
 ## Analysing the recordings
 
-Export the MCUViewer recording to CSV, then:
+The campaign script does this automatically. For MCUViewer recordings, export them to CSV, then:
 
 ```
 pip install -r tools/requirements.txt
