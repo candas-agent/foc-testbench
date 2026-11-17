@@ -18,8 +18,8 @@ static void run_ms(uint32_t ms) {
   while (millis() - t0 < ms && motor.enabled) bench_step();
 }
 
-// records the phase A current over ~4 electrical periods at the given speed, returns the zero crossing flatness
-static float measure_flatness(float velocity, float comp) {
+// records over ~4 electrical periods at the given speed (motor disabled at the end)
+static void record_at(float velocity, float comp) {
   motor.deadtime_compensation = comp;
   motor.target = velocity;
   motor.enable();
@@ -32,6 +32,10 @@ static float measure_flatness(float velocity, float comp) {
   bench_disable();
   TEST_ASSERT_TRUE_MESSAGE(rec_done(), "recording interrupted by the safety");
   motor.target = 0;
+}
+
+static float measure_flatness(float velocity, float comp) {
+  record_at(velocity, comp);
   return zero_crossing_flatness(rec_data(), rec_count());
 }
 
@@ -55,11 +59,11 @@ void test_calibration() {
   calibrated = mean;
 }
 
-static void compare(const char* name) {
+static void compare(const char* name, float velocity) {
   if (isnan(calibrated)) TEST_IGNORE_MESSAGE("needs test_calibration");
-  float off = measure_flatness(2.0f, 0);
+  float off = measure_flatness(velocity, 0);
   _delay(1000);
-  float on = measure_flatness(2.0f, calibrated);
+  float on = measure_flatness(velocity, calibrated);
   char msg[100];
   snprintf(msg, sizeof(msg), "%s |i|<10%% of peak: off %d.%d%%, on %d.%d%% (pure sine 6.4%%)", name,
            (int)(100 * off), (int)(1000 * off) % 10, (int)(100 * on), (int)(1000 * on) % 10);
@@ -69,11 +73,12 @@ static void compare(const char* name) {
 }
 
 // open loop, voltage mode, same fundamental amplitude with and without compensation
+// low speed: the open loop voltage (OPENLOOP_VOLTAGE) must stay above the back-EMF (~0.32 V per rad/s)
 void test_openloop_voltage() {
   motor.torque_controller = TorqueControlType::voltage;
   motor.controller = MotionControlType::velocity_openloop;
   equal_amplitude = 1;
-  compare("voltage");
+  compare("voltage", 0.5f);
   equal_amplitude = 0;
 }
 
@@ -82,8 +87,35 @@ void test_openloop_current() {
   motor.torque_controller = TorqueControlType::foc_current;
   motor.controller = MotionControlType::velocity_openloop;
   motor.deadtime_comp_use_measured = 0;
-  compare("current");
+  compare("current", 2.0f);
   motor.torque_controller = TorqueControlType::voltage;
+}
+
+// MXLEMMING observer running in parallel to the open loop (current mode): the ripple of the angle error
+// (observer - open loop angle) should be lower with the compensation, the dead-time voltage error
+// being integrated by the observer. Reported at several speeds, asserted at the lowest one.
+void test_observer_ripple() {
+  if (isnan(calibrated)) TEST_IGNORE_MESSAGE("needs test_calibration");
+  motor.torque_controller = TorqueControlType::foc_current;
+  motor.controller = MotionControlType::velocity_openloop;
+  const float speeds[] = {1.0f, 2.0f, 4.0f};
+  float off_low = NAN, on_low = NAN;
+  for (int k = 0; k < 3; k++) {
+    record_at(speeds[k], 0);
+    float off = angle_error_ripple(rec_data(), rec_count());
+    _delay(1000);
+    record_at(speeds[k], calibrated);
+    float on = angle_error_ripple(rec_data(), rec_count());
+    _delay(1000);
+    char msg[100];
+    snprintf(msg, sizeof(msg), "observer ripple at %d.%d rad/s [deg]: off %d.%d, on %d.%d", (int)speeds[k], (int)(10 * speeds[k]) % 10,
+             (int)degrees(off), (int)(10 * degrees(off)) % 10, (int)degrees(on), (int)(10 * degrees(on)) % 10);
+    TEST_MESSAGE(msg);
+    if (k == 0) { off_low = off; on_low = on; }
+  }
+  motor.deadtime_compensation = 0;
+  motor.torque_controller = TorqueControlType::voltage;
+  TEST_ASSERT_TRUE_MESSAGE(on_low < off_low, "compensation does not reduce the observer angle ripple at low speed");
 }
 
 void setup() {
@@ -93,6 +125,7 @@ void setup() {
   RUN_TEST(test_calibration);
   RUN_TEST(test_openloop_voltage);
   RUN_TEST(test_openloop_current);
+  RUN_TEST(test_observer_ripple);
   UNITY_END();
 }
 

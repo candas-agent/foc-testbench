@@ -5,6 +5,7 @@ BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHA
 // gain calculation: https://community.simplefoc.com/t/b-g431b-esc1-current-control/521/21
 LowsideCurrentSense currentSense = LowsideCurrentSense(0.003f, -64.0f / 7.0f, A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
 Commander command = Commander(Serial);
+MXLEMMINGObserverSensor observer = MXLEMMINGObserverSensor(motor);  // after motor: reads its KV and pole pairs
 
 volatile DebugVars dbg;
 float openloop_voltage = OPENLOOP_VOLTAGE;
@@ -84,9 +85,11 @@ float bench_calibrate(float max_current) {
 // ---------------------------------------------------------------------------
 // Recorder
 // ---------------------------------------------------------------------------
-static Sample rec_buf[RECORD_SAMPLES];
-static int rec_n = 0;
-static bool rec_running = false;
+extern "C" {
+Sample rec_buf[RECORD_SAMPLES];
+volatile int32_t rec_n = 0;
+volatile int32_t rec_running = 0;
+}
 static bool rec_auto_dump = false;
 static uint32_t rec_period_us = 0, rec_t0 = 0, rec_last = 0;
 
@@ -95,7 +98,7 @@ void rec_start(uint32_t period_us, bool auto_dump) {
   rec_auto_dump = auto_dump;
   rec_n = 0;
   rec_t0 = rec_last = _micros();
-  rec_running = true;
+  rec_running = 1;
 }
 bool rec_done() { return !rec_running && rec_n > 0; }
 int rec_count() { return rec_n; }
@@ -103,13 +106,15 @@ const Sample* rec_data() { return rec_buf; }
 
 void rec_dump(Print& out) {
   out.println(F("REC_BEGIN"));
-  out.println(F("t_us,ia,comp_a"));
+  out.println(F("t_us,ia,comp_a,angle_err"));
   for (int k = 0; k < rec_n; k++) {
     out.print(rec_buf[k].t_us);
     out.print(',');
     out.print(rec_buf[k].ia, 4);
     out.print(',');
-    out.println(rec_buf[k].comp_a, 4);
+    out.print(rec_buf[k].comp_a, 4);
+    out.print(',');
+    out.println(rec_buf[k].angle_err, 4);
   }
   out.println(F("REC_END"));
 }
@@ -122,8 +127,9 @@ static void rec_update() {
   rec_buf[rec_n].t_us = now - rec_t0;
   rec_buf[rec_n].ia = dbg.ia;
   rec_buf[rec_n].comp_a = dbg.comp_a;
+  rec_buf[rec_n].angle_err = dbg.angle_err;
   if (++rec_n >= RECORD_SAMPLES) {
-    rec_running = false;
+    rec_running = 0;
     if (rec_auto_dump) {
       // dumping blocks the loop: stop the motor first (open loop would stall)
       bench_disable(F("recording done"));
@@ -144,6 +150,21 @@ float zero_crossing_flatness(const Sample* s, int n) {
   int small = 0;
   for (int k = 0; k < n; k++) if (fabsf(s[k].ia - mean) < 0.1f * peak) small++;
   return (float)small / n;
+}
+
+float angle_error_ripple(const Sample* s, int n) {
+  if (n < 10) return NAN;
+  float sc = 0, cc = 0;
+  for (int k = 0; k < n; k++) { sc += sinf(s[k].angle_err); cc += cosf(s[k].angle_err); }
+  float mean = atan2f(sc, cc);
+  float sq = 0;
+  for (int k = 0; k < n; k++) {
+    float d = s[k].angle_err - mean;
+    while (d > _PI) d -= _2PI;
+    while (d < -_PI) d += _2PI;
+    sq += d * d;
+  }
+  return sqrtf(sq / n);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +219,13 @@ static void updateDebug() {
   dbg.electrical_angle = motor.electrical_angle;
   dbg.velocity = motor.shaft_velocity;
   dbg.loop_us = (float)motor.loopfoc_time_us;
+  dbg.obs_angle = observer.electrical_angle;
+  float e = observer.electrical_angle - _normalizeAngle(motor.electrical_angle);
+  if (e > _PI) e -= _2PI;
+  if (e < -_PI) e += _2PI;
+  dbg.angle_err = e;
+  dbg.fault = (uint32_t)fault;
+  dbg.enabled = (uint32_t)motor.enabled;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,10 +301,12 @@ static void doPing(char*) {}  // heartbeat, silent
 
 static void doRecord(char* cmd) {
   if (cmd[0] == 'D') { rec_dump(Serial); return; }  // RD: dump the last recording
+  bool dump = true;
+  if (cmd[0] == 'N') { dump = false; cmd++; }       // RN: no serial dump (read with pyOCD)
   uint32_t period = hasArg(cmd) ? (uint32_t)atol(cmd) : 1000;
   Serial.print(F("Recording, period [us]: "));
   Serial.println(period);
-  rec_start(period, true);
+  rec_start(period, dump);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +344,10 @@ void bench_setup() {
   motor.deadtime_comp_threshold = DEADTIME_THRESHOLD;
   motor.deadtime_comp_use_measured = 0;
 
+  dbg.magic = DBG_MAGIC;
+  // observer in parallel (not linked): no alignment needed, angle of the flux = rotor d axis
+  observer.init();
+
   motor.useMonitoring(Serial);
   motor.monitor_variables = 0;  // nothing streamed by default, use MCUViewer
 
@@ -339,6 +373,8 @@ void bench_setup() {
 
 void bench_step() {
   updateVoltageLimit();
+  // observer before loopFOC: it integrates the voltage applied during the last period (motor.Ualpha/Ubeta)
+  observer.update();
   motor.loopFOC();
   motor.move();
   updateDebug();

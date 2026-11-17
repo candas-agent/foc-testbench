@@ -16,7 +16,9 @@
 
 // Limits - the phase resistance is very low: I ~ U / R, 1 V is already ~6 A !
 #define ALIGN_VOLTAGE       0.5f    // [V] rotor alignment before the dead-time calibration (~3 A)
-#define OPENLOOP_VOLTAGE    0.3f    // [V] voltage amplitude in open loop (~1.8 A)
+#define OPENLOOP_VOLTAGE    0.3f    // [V] voltage amplitude in open loop (~1.8 A at standstill)
+// In open loop voltage mode the amplitude must exceed the back-EMF: ~0.32 V per rad/s with KV 17 and
+// 15 pole pairs, so 0.3 V is only enough up to ~0.5 rad/s. Use the current mode (MT2) for higher speeds.
 #define FOC_VOLTAGE_LIMIT   4.0f    // [V] voltage limit of the current controllers
 #define CURRENT_LIMIT       2.0f    // [A] also the current amplitude in open loop with foc_current
 #define VELOCITY_LIMIT      10.0f   // [rad/s]
@@ -38,4 +40,4 @@
 #define CALIB_MAX_CURRENT_LIMIT 2.0f  // [A] the calibration current is clamped to this value
 
 // Recorder (R command): samples stored in RAM then dumped as CSV over serial
-#define RECORD_SAMPLES        1000
+#define RECORD_SAMPLES        800     // 16 bytes each
