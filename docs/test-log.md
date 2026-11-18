@@ -135,3 +135,10 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - 2.4 V: stopped by the script cut (3.8 A) in all four attempts: at start-up without ramp (4.10 / 3.80 A), and
     ~0.3 s after reaching 2.4 V with a 1 s ramp from 1.2 V (3.82 / 4.01 A): ~3.1 A fundamental + noise spikes
     (+-0.8 A) exceed the cut. No board fault. 1.8 V (~2 A) is the practical maximum with the current cuts.
+- Current mode (MT2), 1 A, 2 rad/s, 6 s (data/2026-11-18_gd32_current): the PI holds iq 1.000 A, id ~0 with
+  the 100 Hz bandwidth and the ~1.26 kHz loop. Wheel turns with many jerks (user).
+  - Without compensation: controller voltage uq 1.47 / ud -0.35 V (|u| 1.51 V, ESC1: 0.95 V same conditions),
+    THD 17.9 %, |i|<10 % 11.1 %.
+  - With 0.605 V (threshold 0.2 A): |u| 0.83 V (the compensation supplies the dead-time voltage the PI had to
+    add), THD 21.0 %, |i|<10 % 4.2 %: a step of the current at the zero crossing (~185 deg), the compensation
+    switches too abruptly (measured min. threshold 1.22 A). Both waveforms are skewed by the rotor jerks.
