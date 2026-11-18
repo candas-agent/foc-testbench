@@ -132,3 +132,6 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
     THD 10.0 % -> **2.7 %**, |i|<10 % 13.9 % -> 8.3 % (pure sine 6.4 %): without compensation the current is
     trapezoidal (flat tops, kink at the zero crossing), with it close to a sine. Residual noise rms 0.24 -> 0.20 A.
     The user felt fewer jerks with compensation (also at 1.2 V), some remain (cogging, open loop). One run each.
+  - 2.4 V: stopped by the script cut (3.8 A) in all four attempts: at start-up without ramp (4.10 / 3.80 A), and
+    ~0.3 s after reaching 2.4 V with a 1 s ramp from 1.2 V (3.82 / 4.01 A): ~3.1 A fundamental + noise spikes
+    (+-0.8 A) exceed the cut. No board fault. 1.8 V (~2 A) is the practical maximum with the current cuts.

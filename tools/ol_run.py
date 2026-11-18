@@ -37,6 +37,10 @@ def main():
                         "compensation if the compensation matches the dead-time loss")
     p.add_argument("--duration", type=float, default=8.0, help="[s]")
     p.add_argument("--imax", type=float, default=3.0, help="software cut on any phase current [A]")
+    p.add_argument("--ramp", type=float, default=0.0,
+                   help="voltage mode: start at --ramp-from V and reach --voltage after this time [s] "
+                        "(avoids the current peak while the rotor catches the field)")
+    p.add_argument("--ramp-from", type=float, default=1.2, help="start voltage of the ramp [V]")
     p.add_argument("--out", default=None, help="CSV of the live reads (t_s, ia, ib, comp_a, electrical_angle)")
     a = p.parse_args()
     elf = a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")
@@ -61,7 +65,7 @@ def main():
 
         try:
             for cmd in ("ME0", "XC", "XH1", "MC3", "MT0" if a.mode == "voltage" else "MT2", "DE1" if a.equal else "DE0",
-                        f"D{a.comp:.4f}", f"DB{a.voltage}", f"M{a.speed}"):
+                        f"D{a.comp:.4f}", f"DB{min(a.voltage, a.ramp_from) if a.ramp > 0 else a.voltage}", f"M{a.speed}"):
                 send(cmd)
             if a.current is not None:
                 send(f"MLC{a.current}")
@@ -69,7 +73,15 @@ def main():
             send("ME1")
             t0 = time.perf_counter()
             last_ping = t0
+            last_ramp = -1.0
             while (t := time.perf_counter() - t0) < a.duration:
+                # voltage ramp, one command every 0.1 s (the commands also keep the heartbeat alive)
+                if a.ramp > 0 and a.mode == "voltage" and t - last_ramp >= 0.1 and last_ramp < a.ramp:
+                    k = min(t / a.ramp, 1.0)
+                    u = a.ramp_from + k * (a.voltage - a.ramp_from)
+                    send(f"DB{u:.3f}")
+                    last_ramp = t if k < 1.0 else a.ramp
+                    last_ping = time.perf_counter()
                 if t - (last_ping - t0) > 0.5:
                     send("P")
                     last_ping = time.perf_counter()
