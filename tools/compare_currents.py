@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Compare phase current waveforms recorded with MCUViewer (CSV export), e.g. with and
+Compare phase current waveforms recorded as CSV (e.g. exported by a debug or plotting tool), with and
 without dead-time compensation.
 
 For each file:
-  - resamples the signal on a uniform time grid (MCUViewer samples are not evenly spaced)
+  - resamples the signal on a uniform time grid (exported samples are not always evenly spaced)
   - finds the electrical frequency (FFT peak)
   - folds all periods on top of each other and averages them -> one clean period
   - computes the THD (harmonics 2..15) and the "zero crossing flatness":

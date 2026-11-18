@@ -12,7 +12,7 @@ Example:
 
   --comps accepts values in volts and "cal" (runs the calibration first and uses the result).
   --via serial: the recording is dumped over serial; --via pyocd: read from the board memory through
-  the ST-Link (faster, needs the firmware ELF; close MCUViewer first). Commands and heartbeat always use serial.
+  the ST-Link (faster, needs the firmware ELF). Commands and heartbeat always use serial.
 
 In voltage mode the open loop amplitude (--ol-voltage) must exceed the back-EMF (~0.32 V per rad/s with
 KV 17 and 15 pole pairs): speeds that are too high for it are skipped. Use the current mode for higher speeds.

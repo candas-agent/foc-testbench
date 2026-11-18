@@ -17,7 +17,7 @@ extern Commander command;
 // MXLEMMING sensorless observer, NOT linked to the motor: runs in parallel to the open loop
 extern MXLEMMINGObserverSensor observer;
 
-// Variables for MCUViewer / pyOCD (global, volatile so they are never optimised away)
+// Variables read with pyOCD (global, volatile so they are never optimised away)
 // The layout is mirrored in tools/board_mem.py: update both together (DBG_MAGIC checks the version).
 #define DBG_MAGIC 0xF0CDB002u
 struct DebugVars {

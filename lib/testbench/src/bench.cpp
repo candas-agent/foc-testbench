@@ -354,7 +354,7 @@ void bench_setup() {
   observer.init();
 
   motor.useMonitoring(Serial);
-  motor.monitor_variables = 0;  // nothing streamed by default, use MCUViewer
+  motor.monitor_variables = 0;  // nothing streamed by default, read dbg with pyOCD
 
   motor.init();
   motor.tuneCurrentController(CURRENT_BANDWIDTH);

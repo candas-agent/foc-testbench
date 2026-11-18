@@ -96,11 +96,9 @@ In open loop (voltage mode) the voltage limit is managed by the test bench (`DB`
 
 Defaults are in [`include/config.h`](include/config.h). The calibration current is clamped to `CALIB_MAX_CURRENT_LIMIT` (2 A).
 
-## Watching the variables (MCUViewer)
+## Debug variables (`dbg`)
 
-[MCUViewer](https://github.com/klonyyy/MCUViewer) reads the variables through the ST-Link without slowing down the loop. Point it to `.pio/build/<env>/firmware.elf`.
-
-All useful values are grouped in the global `dbg` structure (defined in [`lib/testbench`](lib/testbench/src/bench.h), shared by the firmware and the tests):
+All useful values are grouped in the global `dbg` structure (defined in [`lib/testbench`](lib/testbench/src/bench.h), shared by the firmware and the tests), read live with pyOCD (see below):
 
 | Variable | Content |
 |---|---|
@@ -113,7 +111,7 @@ All useful values are grouped in the global `dbg` structure (defined in [`lib/te
 | `dbg.obs_angle`, `dbg.angle_err` | observer electrical angle, observer − open loop angle [rad] |
 | `dbg.fault`, `dbg.enabled` | last safety fault, motor enabled |
 
-`motor.deadtime_compensation` can also be changed live from MCUViewer.
+`motor.deadtime_compensation` is changed live with the `D` command.
 
 ## Test procedure
 
@@ -168,7 +166,7 @@ python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --durati
 
 ## Reading the board memory with pyOCD
 
-pyOCD reads the variables through the ST-Link while the firmware runs, like MCUViewer (close MCUViewer first, only one tool can use the probe). The addresses come from `.pio/build/esc1/firmware.elf`; the layouts are mirrored in [`tools/board_mem.py`](tools/board_mem.py) and checked with `dbg.magic`.
+pyOCD reads the variables through the ST-Link while the firmware runs (only one tool can use the probe at a time). The addresses come from `.pio/build/esc1/firmware.elf`; the layouts are mirrored in [`tools/board_mem.py`](tools/board_mem.py) and checked with `dbg.magic`.
 
 ```
 python tools/live.py --duration 5 --out live.csv          # all dbg fields, as fast as the probe allows
@@ -179,7 +177,7 @@ python tools/live.py --fields ia angle_err --print         # selected fields, pr
 
 ## Analysing the recordings
 
-The campaign script does this automatically. For MCUViewer recordings, export them to CSV, then:
+The campaign script does this automatically. For recordings exported as CSV by another tool:
 
 ```
 pip install -r tools/requirements.txt

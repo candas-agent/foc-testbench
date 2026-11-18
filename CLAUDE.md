@@ -21,8 +21,8 @@ connected for now: open loop only.
 - Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
 - Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).
 - Hardware setup, safety and recorder code: lib/testbench (shared by src/main.cpp and the tests).
-- pyOCD: `tools/live.py` (read dbg live), `tools/board_mem.py` (ELF symbols, recorder). Only one tool on the ST-Link:
-  ask the user to close MCUViewer. The dbg/Sample layouts are mirrored in board_mem.py: update both together and
+- pyOCD: `tools/live.py` (read dbg live), `tools/board_mem.py` (ELF symbols, recorder). Only one tool on the ST-Link
+  at a time (pyOCD or an upload). The dbg/Sample layouts are mirrored in board_mem.py: update both together and
   bump DBG_MAGIC.
 - Open loop voltage mode only works below ~0.5 rad/s with 0.3 V (back-EMF ~0.32 V per rad/s): use MT2 above.
 - The MXLEMMING observer runs in parallel (not linked to the motor); `angle_err` ripple is the metric.

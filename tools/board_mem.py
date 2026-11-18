@@ -1,6 +1,6 @@
 """
 Read the test bench variables from the board memory with pyOCD, through the ST-Link, without stopping the program
-(same principle as MCUViewer). MCUViewer and pyOCD cannot use the ST-Link at the same time: close MCUViewer first.
+(only one tool can use the ST-Link at a time).
 
 The symbol addresses come from the firmware ELF (.pio/build/esc1/firmware.elf). The struct layouts below mirror
 lib/testbench/src/bench.h: update both together (DBG_MAGIC is checked).
@@ -59,7 +59,7 @@ class BoardMemory:
             unique_id=self.probe_id, connect_mode="attach", target_override="cortex_m",
             frequency=self.frequency, options={"resume_on_disconnect": True})
         if self.session is None:
-            raise RuntimeError("no debug probe found (ST-Link busy? close MCUViewer)")
+            raise RuntimeError("no debug probe found (ST-Link busy? close other debug tools)")
         self.session.open()
         self.target = self.session.board.target
         magic = self.read_dbg()["magic"]
