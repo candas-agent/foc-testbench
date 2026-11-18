@@ -181,6 +181,15 @@ python tools/ol_run.py --port COM8 --voltage 0.6 --speed 0.5 --duration 8
 python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --duration 6
 ```
 
+### Other tools
+
+| Tool | Moves the motor | Purpose |
+|---|---|---|
+| `tools/bench_cmd.py --port rtt --env gd32f130 X D S` | only with `ME1`, `DC`, `SA` (always `ME0` at the end) | send commands, print the replies; `--wait PATTERN TIMEOUT` for long commands (`DC1.5`) |
+| `tools/ol_run.py ... --out run.csv` | yes | live reads to CSV, current fundamental fitted on the open loop angle, `--equal` (DE1), `--ramp` |
+| `tools/fold_compare.py a.csv b.csv --labels ...` | no | waveforms from `ol_run.py --out` folded on the angle: THD, zero crossing share, plot |
+| `tools/zero_torque.py --port rtt --env gd32f130 --comp 0.605 --threshold 1.22` | yes (closed loop, hall board) | zero torque test: no compensation / DM0 / DM1, 20 s each, the motor beeps N times before phase N |
+
 ## Reading the board memory with pyOCD
 
 pyOCD reads the variables through the ST-Link while the firmware runs (only one tool can use the probe at a time). The addresses come from `.pio/build/esc1/firmware.elf`; the layouts are mirrored in [`tools/board_mem.py`](tools/board_mem.py) and checked with `dbg.magic`.
