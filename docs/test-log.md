@@ -36,6 +36,7 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
 | 2026-11-18 | MT2 (2 A) sweep | 2 | 0.113 | 0.3 | 0.113 | 1.56 | 6.5 | obs 5.16 deg (0.47 x Vbus*dt) |
 | 2026-11-18 | MT2 (2 A) sweep | 2 | 0.24 | 0.3 | - | 1.49 | 6.5 | obs 4.90 deg (1 x Vbus*dt, dekutree64 rule) |
 | 2026-11-18 | MT2 (2 A) sweep | 2 | 0.48 | 0.3 | - | 2.21 | 6.0 | obs 7.74 deg (2 x Vbus*dt, 2023 forum rule) |
+| 2026-11-18 | GD32 calibration DC1.5 | 0 | - | 0.2 | 0.605 (ratio 1.75) | | | GD32F130 slave, 26 V, R est. 0.50 Ohm, min. threshold 1.22 A |
 
 ## 2026-11-18: first power-up
 
@@ -102,3 +103,17 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
 
   Any value between 0.113 and 0.24 V clearly beats no compensation; between them the THD differences are within
   the run-to-run spread (open loop jerks). The observer ripple is lowest at 0.24 V (1 x Vbus*dead_zone).
+
+## 2026-11-18: GD32F130 split board (slave TT-SD2.2), env gd32f130
+
+- Master board has a shorted MOSFET (wheel hard to turn unpowered): not used. Slave board was read-protected
+  (original firmware): unlocked with OpenOCD (`stm32f1x unlock 0`, flash erased), then flashed.
+- Supply 26 V direct (no ideal diode), Vbus measured 25.8 V. Commands over RTT with a ST-Link V2, pyOCD reads.
+- Current sense offsets must be measured with the driver enabled (R_ds_on sensing): fixed, 0 V test currents
+  -0.03 / -0.04 A mean, noise +-0.8 A. loopFOC 1068 us with the observer, 796 us without (observer off by default).
+- Open loop voltage mode 0.6 V, 0.5 rad/s: the wheel did not turn. Static vector, rotor locked: 0.6 V -> no
+  current above the noise, 1.2 V (2.1 V between the two driven phases) -> 0.72 / -0.75 A: ~0.67 V lost per phase.
+  Phase order and current sense channels checked against the open loop angle (4.24 rad): correct.
+- Calibration `DC1.5` (ALIGN_VOLTAGE 1.5 V on this board): R est. 0.50 Ohm, compensation **0.605 V**, ratio to
+  Vbus*dead_zone (0.346 V) = 1.75, minimum threshold measured 1.22 A. Close to the 0.7 V found by hand in 2023
+  on a GD32 board (SimpleFOC forum).

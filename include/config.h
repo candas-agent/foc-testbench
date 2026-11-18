@@ -17,7 +17,9 @@
 #define PHASE_INDUCTANCE    0.00036858f  // [H]
 
 // Limits - the phase resistance is very low: I ~ U / R, 1 V is already ~6 A !
+#ifndef ALIGN_VOLTAGE            // the board file can raise it (large dead time)
 #define ALIGN_VOLTAGE       0.5f    // [V] rotor alignment before the dead-time calibration (~3 A)
+#endif
 #define OPENLOOP_VOLTAGE    0.3f    // [V] voltage amplitude in open loop (~1.8 A at standstill)
 // In open loop voltage mode the amplitude must exceed the back-EMF: ~0.32 V per rad/s with KV 17 and
 // 15 pole pairs, so 0.3 V is only enough up to ~0.5 rad/s. Use the current mode (MT2) for higher speeds.

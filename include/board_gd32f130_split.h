@@ -42,6 +42,10 @@
 #define OBSERVER_DEFAULT_ON 0
 #define CURRENT_BANDWIDTH   100.0f  // [Hz]
 
+// The dead time eats ~0.67 V per phase on this board (measured: no current at 0.6 V, ~0.75 A at 1.2 V):
+// 0.5 V would not align the rotor before the dead-time calibration. ~1 A expected at 1.5 V.
+#define ALIGN_VOLTAGE       1.5f    // [V]
+
 // Commands and messages: SEGGER RTT through the ST-Link
 #define BENCH_USE_RTT
 
