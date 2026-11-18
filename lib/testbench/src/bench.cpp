@@ -19,6 +19,7 @@ MXLEMMINGObserverSensor observer = MXLEMMINGObserverSensor(motor);  // after mot
 volatile DebugVars dbg;
 float openloop_voltage = OPENLOOP_VOLTAGE;
 int equal_amplitude = 0;
+int observer_on = OBSERVER_DEFAULT_ON;
 
 uint32_t run_timeout_s = RUN_TIMEOUT_S;
 float overcurrent_a = OVERCURRENT_A;
@@ -231,8 +232,9 @@ static void updateDebug() {
   dbg.electrical_angle = motor.electrical_angle;
   dbg.velocity = motor.shaft_velocity;
   dbg.loop_us = (float)motor.loopfoc_time_us;
-  dbg.obs_angle = observer.electrical_angle;
-  float e = observer.electrical_angle - _normalizeAngle(motor.electrical_angle);
+  float e = 0;
+  dbg.obs_angle = observer_on ? observer.electrical_angle : 0;
+  if (observer_on) e = observer.electrical_angle - _normalizeAngle(motor.electrical_angle);
   if (e > _PI) e -= _2PI;
   if (e < -_PI) e += _2PI;
   dbg.angle_err = e;
@@ -250,6 +252,7 @@ static void printDeadtime() {
   bench_io.print(F("threshold: "));      bench_io.println(motor.deadtime_comp_threshold, 4);
   bench_io.print(F("use measured: "));   bench_io.println(motor.deadtime_comp_use_measured);
   bench_io.print(F("equal ampl.: "));    bench_io.println(equal_amplitude);
+  bench_io.print(F("observer: "));       bench_io.println(observer_on);
   bench_io.print(F("openloop U [V]: ")); bench_io.println(openloop_voltage, 4);
   bench_io.print(F("expected Vbus*dead_zone [V]: ")); bench_io.println(SUPPLY_VOLTAGE * DEAD_ZONE, 4);
 }
@@ -272,6 +275,10 @@ static void doDeadtime(char* cmd) {
       break;
     case 'B':  // open loop voltage amplitude
       command.scalar(&openloop_voltage, cmd + 1);
+      break;
+    case 'O':  // MXLEMMING observer on/off (heavy on MCUs without FPU)
+      if (hasArg(cmd + 1)) observer_on = atoi(cmd + 1) ? 1 : 0;
+      bench_io.println(observer_on);
       break;
     case 'C':  // calibration
       bench_calibrate((float)atof(cmd + 1));
@@ -423,7 +430,7 @@ void bench_setup() {
 void bench_step() {
   updateVoltageLimit();
   // observer before loopFOC: it integrates the voltage applied during the last period (motor.Ualpha/Ubeta)
-  observer.update();
+  if (observer_on) observer.update();
   motor.loopFOC();
   motor.move();
   updateDebug();

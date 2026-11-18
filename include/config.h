@@ -26,7 +26,12 @@
 #define VELOCITY_LIMIT      10.0f   // [rad/s]
 
 // Controllers
+#ifndef CURRENT_BANDWIDTH        // the board file can lower it (slow loop)
 #define CURRENT_BANDWIDTH   300.0f  // [Hz] current PI tuned from R and L (tuneCurrentController)
+#endif
+#ifndef OBSERVER_DEFAULT_ON      // MXLEMMING observer in parallel at start-up (DO0/DO1 commands)
+#define OBSERVER_DEFAULT_ON 1
+#endif
 #define CURRENT_LPF_TF      0.002f  // [s] current low pass filter
 
 // Dead-time compensation defaults (disabled at start-up)

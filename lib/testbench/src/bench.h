@@ -43,6 +43,7 @@ extern volatile DebugVars dbg;
 // test bench state
 extern float openloop_voltage;   // open loop voltage amplitude [V]
 extern int equal_amplitude;      // 1: open loop voltage lowered by 4/pi*compensation
+extern int observer_on;          // MXLEMMING observer updated every loop (DO0/DO1)
 
 // --- main functions ---
 void bench_setup();              // hardware init, motor DISABLED at the end

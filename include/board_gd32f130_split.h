@@ -37,6 +37,11 @@
 #define VBUS_GAIN           31.0f   // Vbus = ADC voltage * VBUS_GAIN
 #define VBUS_TOLERANCE      0.15f   // warn if the measured Vbus differs from SUPPLY_VOLTAGE by more than this
 
+// No FPU (software floats): loopFOC ~1 ms with the observer. Observer off at start-up (DO1 to enable it)
+// and a slower current controller to keep a margin to the loop frequency.
+#define OBSERVER_DEFAULT_ON 0
+#define CURRENT_BANDWIDTH   100.0f  // [Hz]
+
 // Commands and messages: SEGGER RTT through the ST-Link
 #define BENCH_USE_RTT
 
