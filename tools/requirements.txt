@@ -2,3 +2,6 @@ pyocd
 numpy
 matplotlib
 pyserial
+pyvisa
+pyvisa-py
+pyusb

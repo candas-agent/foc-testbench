@@ -11,7 +11,7 @@
 
 // Power stage
 #define SUPPLY_VOLTAGE      12.0f   // [V] set the REAL measured supply voltage, the compensation volts are scaled with it
-#define PWM_FREQUENCY       25000   // [Hz]
+#define BENCH_PWM_FREQUENCY 25000   // [Hz]
 #define DEAD_ZONE           0.02f   // dead-time as a fraction of the PWM period (SimpleFOC default)
 
 // Limits - the phase resistance is very low: I ~ U / R, 1 V is already ~6 A !

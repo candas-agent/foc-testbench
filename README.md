@@ -157,6 +157,15 @@ python tools/campaign.py --port COM5 --speeds 0.5 1 2 4 --comps 0 cal --modes vo
 
 `--comps` takes values in volts and `cal` (runs the calibration first). Voltage mode speeds too high for the open loop voltage (`--ol-voltage`) are skipped. The summary includes the THD, the zero crossing flatness and the observer angle ripple. Results go to `data/<date-time>/`.
 
+### Short monitored run
+
+`tools/ol_run.py` runs the motor for a few seconds in open loop (voltage or current mode), reads the phase currents live with pyOCD, stops above `--imax` (3 A by default) and prints the mean dq currents and voltages. THE MOTOR MOVES.
+
+```
+python tools/ol_run.py --port COM8 --voltage 0.6 --speed 0.5 --duration 8
+python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --duration 6
+```
+
 ## Reading the board memory with pyOCD
 
 pyOCD reads the variables through the ST-Link while the firmware runs, like MCUViewer (close MCUViewer first, only one tool can use the probe). The addresses come from `.pio/build/esc1/firmware.elf`; the layouts are mirrored in [`tools/board_mem.py`](tools/board_mem.py) and checked with `dbg.magic`.

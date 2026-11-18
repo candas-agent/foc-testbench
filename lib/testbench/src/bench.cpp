@@ -1,6 +1,8 @@
 #include "bench.h"
 
-BLDCMotor motor = BLDCMotor(POLE_PAIRS, PHASE_RESISTANCE, KV_RATING, PHASE_INDUCTANCE);
+// Ld must be given: with 4 arguments only Lq is set, Ld stays NOT_SET (-12345) and tuneCurrentController()
+// then computes PID_current_d.P = -12345 * 2*pi*BW (positive feedback, instant overcurrent in foc_current)
+BLDCMotor motor = BLDCMotor(POLE_PAIRS, PHASE_RESISTANCE, KV_RATING, PHASE_INDUCTANCE, PHASE_INDUCTANCE);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
 // gain calculation: https://community.simplefoc.com/t/b-g431b-esc1-current-control/521/21
 LowsideCurrentSense currentSense = LowsideCurrentSense(0.003f, -64.0f / 7.0f, A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
@@ -54,9 +56,12 @@ static void updateVoltageLimit() {
   if (isOpenLoop() && motor.torque_controller == TorqueControlType::voltage) {
     float u = openloop_voltage;
     if (equal_amplitude) u -= (4.0f / _PI) * motor.deadtime_compensation;
-    motor.voltage_limit = u > 0 ? u : 0;
+    motor.updateVoltageLimit(u > 0 ? u : 0);
   } else {
-    motor.voltage_limit = FOC_VOLTAGE_LIMIT;
+    // updateVoltageLimit() and not voltage_limit = : the current PI limits must follow. SimpleFOC copies
+    // voltage_limit into them on every motion/torque mode change (MC/MT commands), so after a voltage mode
+    // run they kept the small open loop voltage and capped the current controllers.
+    motor.updateVoltageLimit(FOC_VOLTAGE_LIMIT);
   }
 }
 
@@ -67,7 +72,7 @@ float bench_calibrate(float max_current) {
   Serial.println(max_current, 3);
   bool en = motor.enabled;
   if (!en) motor.enable();
-  motor.voltage_limit = FOC_VOLTAGE_LIMIT;
+  motor.updateVoltageLimit(FOC_VOLTAGE_LIMIT);
   float udt = motor.calibrateDeadtimeCompensation(max_current);
   updateVoltageLimit();
   if (!en) motor.disable();
@@ -318,7 +323,7 @@ void bench_setup() {
   // no position sensor linked: open loop only
 
   driver.voltage_power_supply = SUPPLY_VOLTAGE;
-  driver.pwm_frequency = PWM_FREQUENCY;
+  driver.pwm_frequency = BENCH_PWM_FREQUENCY;
   driver.dead_zone = DEAD_ZONE;
   driver.init();
   motor.linkDriver(&driver);

@@ -12,7 +12,7 @@ connected for now: open loop only.
 - The firmware starts with the motor disabled; disable it again (`ME0`) after each test: in open loop the current flows even at target 0.
 - If the serial output shows an error or the behaviour is unexpected, disable the motor (`ME0`) before investigating.
 
-- `pio test -e esc1 -f test_motor` and `tools/campaign.py` make the motor move: ask for confirmation before each run,
+- `pio test -e esc1 -f test_motor`, `tools/campaign.py` and `tools/ol_run.py` make the motor move: ask for confirmation before each run,
   and only when the user says they are next to the bench. `test_static` does not move the motor but still flashes the board.
 - Keep the safety features (run timeout, overcurrent cut, heartbeat) enabled; never weaken them without asking.
 
