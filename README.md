@@ -47,6 +47,8 @@ Two boards are supported, selected by the PlatformIO environment (board settings
 - ST-Link: GND, SWDIO, SWCLK on the 4-pin debug header next to the MCU. Do not connect the ST-Link 3.3 V when the board is powered.
 - No ideal diode on the supply here: energy fed back by the motor goes to the supply. Keep low speeds and don't spin the wheel fast by hand. The bus voltage is measured once at start-up only (PA4), the ADC is then used by the current sense.
 - 8 KB of RAM: the recorder holds 100 samples (`RECORD_SAMPLES`), the tools read the size from the ELF. `pio test` is not available (no serial port).
+- Hall sensors (PB11, PF1, PC14) with the SimpleFOC drivers `SmoothingSensor`: read from start-up but not linked. `S` prints their state, `SA` links them and runs the SimpleFOC alignment (**the motor moves**, then it is disabled). After `SA` the closed loop modes are allowed (`MC0` torque, `MC1` velocity), always with current control (`MT2`), torque target clamped to `TORQUE_TARGET_MAX` (1 A).
+- Observer off at start-up on this board (`DO1` to enable it): no FPU, the loop takes ~0.8 ms without it.
 - Commands: same as below, through RTT: `python tools/ol_run.py --port rtt --env gd32f130 ...`, `python tools/campaign.py --port rtt --env gd32f130 ...`.
 
 ### Safety
