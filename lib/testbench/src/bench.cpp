@@ -367,7 +367,14 @@ void bench_setup() {
 
   // current sense: the phases are wired to known pins, no alignment needed
   currentSense.linkDriver(&driver);
+#ifdef CS_CALIBRATE_DRIVER_ENABLED
+  // offsets measured with the low side MOSFETs switching (current sense init sets all phases to 50 %: 0 V)
+  driver.enable();
+#endif
   currentSense.init();
+#ifdef CS_CALIBRATE_DRIVER_ENABLED
+  driver.disable();
+#endif
   currentSense.skip_align = true;
   motor.linkCurrentSense(&currentSense);
 

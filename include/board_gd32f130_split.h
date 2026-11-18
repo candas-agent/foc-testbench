@@ -23,6 +23,10 @@
 #define CS_SHUNT            0.008f  // [Ohm] R_ds_on of the low side MOSFETs
 #define CS_GAIN             (-2.5f)
 #define CS_PINS             PB1, PB0, _NC
+// R_ds_on sensing is only valid while the low side MOSFET conducts: the driver must be enabled
+// (all phases at 50 %, 0 V on the motor) while the current sense measures its offsets.
+// Driver disabled during the offset calibration -> offsets ~0.2 V too high -> ~10 A error.
+#define CS_CALIBRATE_DRIVER_ENABLED
 
 // Power latch: must be held high or the board switches itself off (bridge the switch connector on the bench)
 #define SELF_HOLD_PIN       PB2
