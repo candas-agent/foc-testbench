@@ -87,7 +87,7 @@ def main():
                     last_ping = time.perf_counter()
                 d = mem.read_dbg()
                 n += 1
-                rows.append((t, d["ia"], d["ib"], d["comp_a"], d["electrical_angle"]))
+                rows.append((t, d["ia"], d["ib"], d["comp_a"], d["electrical_angle"], d.get("sensor_angle", 0.0)))
                 i = max(abs(d["ia"]), abs(d["ib"]), abs(d["ic"]))
                 peak = max(peak, i)
                 if t > a.duration / 2:
@@ -127,11 +127,18 @@ def main():
             fit = X @ coef
             print(f"{name}: fundamental amplitude {np.hypot(coef[0], coef[1]):.3f} A, "
                   f"residual rms {np.sqrt(np.mean((y - fit) ** 2)):.3f} A (noise + harmonics)")
+    # hall sensor check in open loop: the sensor angle minus the open loop angle must stay ~constant (load angle)
+    if half and any(r[5] for r in half):
+        import numpy as np
+        dlt = np.angle(np.exp(1j * (np.array([r[5] for r in half]) - np.array([r[4] for r in half]))))
+        m = np.angle(np.mean(np.exp(1j * dlt)))
+        sd = np.sqrt(np.mean(np.angle(np.exp(1j * (dlt - m))) ** 2))
+        print(f"sensor - open loop angle: mean {np.degrees(m):.1f} deg el., spread {np.degrees(sd):.1f} deg el.")
     if a.out:
         import csv
         with open(a.out, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["t_s", "ia", "ib", "comp_a", "electrical_angle"])
+            w.writerow(["t_s", "ia", "ib", "comp_a", "electrical_angle", "sensor_angle"])
             w.writerows(rows)
         print(f"{len(rows)} reads -> {a.out}")
     if cut:

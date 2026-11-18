@@ -142,3 +142,11 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - With 0.605 V (threshold 0.2 A): |u| 0.83 V (the compensation supplies the dead-time voltage the PI had to
     add), THD 21.0 %, |i|<10 % 4.2 %: a step of the current at the zero crossing (~185 deg), the compensation
     switches too abruptly (measured min. threshold 1.22 A). Both waveforms are skewed by the rotor jerks.
+- Hall sensors (PB11, PF1, PC14) with the known alignment of the split board sketch (2.09 rad, CCW, no motor
+  movement at start-up): 6 states in order 3-1-5-4-6-2, interrupts OK. Open loop check 1.8 V / 0.5 rad/s: sensor
+  angle 74.6 deg el. ahead of the open loop angle, spread 17 deg (90 deg minus a ~15 deg load angle): alignment OK.
+- Closed loop zero torque test (MC0, MT2, target 0 A, 20 s each, wheel turned by hand up to ~8 rad/s,
+  data/2026-11-18_gd32_hall): no fault.
+  - no compensation: iq sd 0.244 A, id sd 0.179 A
+  - 0.605 V on setpoints (DM0): compensation stays exactly 0 as designed, iq sd 0.202 A, id sd 0.208 A
+  - 0.605 V on measured currents (DM1, threshold 1.22 A): compensation sd 0.071 V, iq sd 0.155 A, id sd 0.227 A
