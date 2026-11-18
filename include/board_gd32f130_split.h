@@ -46,13 +46,18 @@
 // 0.5 V would not align the rotor before the dead-time calibration. ~1 A expected at 1.5 V.
 #define ALIGN_VOLTAGE       1.5f    // [V]
 
-// Hall sensors of the motor (defines_2-0.h), interpolated by the SmoothingSensor of SimpleFOC drivers.
-// Not linked at start-up: the S command shows them, SA links them and runs the alignment (THE MOTOR MOVES),
-// then the closed loop modes are allowed.
+// Hall sensors of the motor (defines_2-0.h), interpolated by the SmoothingSensor of SimpleFOC drivers
+// (phase correction -pi/6 set by its HallSensor constructor). Linked at start-up with the known alignment
+// below (from Candas1/Split_Hoverboard_SimpleFOC include/config.h): initFOC does not move the motor.
+// SA re-runs the automatic alignment if needed (THE MOTOR MOVES).
 #define HALL_A_PIN          PB11
 #define HALL_B_PIN          PF1
 #define HALL_C_PIN          PC14
+#define SENSOR_ZERO_ANGLE   2.09f   // [rad] zero electric angle (MOTOR_zero_electric_offset)
+#define SENSOR_DIRECTION    Direction::CCW
 #define TORQUE_TARGET_MAX   1.0f    // [A] closed loop torque mode: target clamped (a free wheel accelerates)
+// driver voltage limit below Vbus: leaves the low side MOSFETs enough ON time for the R_ds_on current sampling
+#define DRIVER_VOLTAGE_LIMIT_RATIO 0.95f
 
 // Commands and messages: SEGGER RTT through the ST-Link
 #define BENCH_USE_RTT

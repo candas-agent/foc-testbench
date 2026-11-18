@@ -251,7 +251,8 @@ static void updateDebug() {
   dbg.enabled = (uint32_t)motor.enabled;
 #ifdef HALL_A_PIN
   dbg.hall = (uint32_t)hall.hall_state;
-  dbg.sensor_angle = sensor_aligned ? motor.electrical_angle : _normalizeAngle(hall.getMechanicalAngle() * POLE_PAIRS);
+  // sensor electrical angle (with the alignment), also in open loop where motor.electrical_angle is the open loop angle
+  dbg.sensor_angle = sensor_aligned ? motor.electricalAngle() : 0;
 #else
   dbg.hall = 0;
   dbg.sensor_angle = 0;
@@ -333,8 +334,7 @@ static void printSensor() {
 static void doSensor(char* cmd) {
   if (cmd[0] == 'A') {
     if (motor.enabled) { bench_io.println(F("Disable the motor first (ME0)")); return; }
-    bench_io.println(F("Sensor alignment, the motor moves..."));
-    motor.linkSensor(&smooth);
+    bench_io.println(F("Automatic sensor alignment, the motor moves..."));
     motor.zero_electric_angle = NOT_SET;
     motor.sensor_direction = Direction::UNKNOWN;
     motor.enable();
@@ -420,6 +420,9 @@ void bench_setup() {
   driver.voltage_power_supply = SUPPLY_VOLTAGE;
   driver.pwm_frequency = BENCH_PWM_FREQUENCY;
   driver.dead_zone = DEAD_ZONE;
+#ifdef DRIVER_VOLTAGE_LIMIT_RATIO
+  driver.voltage_limit = SUPPLY_VOLTAGE * DRIVER_VOLTAGE_LIMIT_RATIO;
+#endif
   driver.init();
   motor.linkDriver(&driver);
 
@@ -455,9 +458,12 @@ void bench_setup() {
   // observer in parallel (not linked): no alignment needed, angle of the flux = rotor d axis
   observer.init();
 #ifdef HALL_A_PIN
-  // hall sensors read from start-up (S command, dbg.hall) but linked to the motor only by SA
+  // hall sensors linked at start-up with the known alignment: initFOC does not move the motor
   hall.init();
   hall.enableInterrupts(hallA, hallB, hallC);
+  motor.linkSensor(&smooth);
+  motor.zero_electric_angle = SENSOR_ZERO_ANGLE;
+  motor.sensor_direction = SENSOR_DIRECTION;
 #endif
 
   motor.useMonitoring(bench_io);
@@ -465,8 +471,11 @@ void bench_setup() {
 
   motor.init();
   motor.tuneCurrentController(CURRENT_BANDWIDTH);
-  // no sensor and current sense alignment skipped: the motor does not move here
+  // current sense alignment skipped, sensor alignment known (hall board) or no sensor: the motor does not move here
   motor.initFOC();
+#ifdef HALL_A_PIN
+  sensor_aligned = motor.motor_status == FOCMotorStatus::motor_ready ? 1 : 0;
+#endif
 
   motor.target = 0;
   updateVoltageLimit();
