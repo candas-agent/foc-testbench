@@ -10,6 +10,9 @@
 #include <SimpleFOC.h>
 #include "config.h"
 #include "encoders/MXLEMMING_observer/MXLEMMINGObserverSensor.h"
+#ifdef HALL_A_PIN
+#include "encoders/smoothing/SmoothingSensor.h"
+#endif
 
 extern BLDCMotor motor;
 extern BLDCDriver6PWM driver;
@@ -22,7 +25,7 @@ extern MXLEMMINGObserverSensor observer;
 
 // Variables read with pyOCD (global, volatile so they are never optimised away)
 // The layout is mirrored in tools/board_mem.py: update both together (DBG_MAGIC checks the version).
-#define DBG_MAGIC 0xF0CDB003u
+#define DBG_MAGIC 0xF0CDB004u
 struct DebugVars {
   uint32_t magic;                // DBG_MAGIC
   float ia, ib, ic;              // measured phase currents [A]
@@ -37,6 +40,8 @@ struct DebugVars {
   uint32_t fault;                // last safety fault (0 none, 1 timeout, 2 overcurrent, 3 heartbeat)
   uint32_t enabled;              // motor enabled
   float vbus;                    // bus voltage measured at start-up [V], NAN if the board has no measurement
+  uint32_t hall;                 // hall sensor state (0..7), 0 if the board has no hall sensors
+  float sensor_angle;            // electrical angle from the sensor (0 if none) [rad]
 };
 extern volatile DebugVars dbg;
 
@@ -44,6 +49,7 @@ extern volatile DebugVars dbg;
 extern float openloop_voltage;   // open loop voltage amplitude [V]
 extern int equal_amplitude;      // 1: open loop voltage lowered by 4/pi*compensation
 extern int observer_on;          // MXLEMMING observer updated every loop (DO0/DO1)
+extern int sensor_aligned;       // 1 once the hall sensors are linked and aligned (SA): closed loop allowed
 
 // --- main functions ---
 void bench_setup();              // hardware init, motor DISABLED at the end

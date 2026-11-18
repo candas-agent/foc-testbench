@@ -15,6 +15,15 @@ BLDCDriver6PWM driver = BLDCDriver6PWM(DRIVER_PINS);
 LowsideCurrentSense currentSense = LowsideCurrentSense(CS_SHUNT, CS_GAIN, CS_PINS);
 Commander command = Commander(bench_io);
 MXLEMMINGObserverSensor observer = MXLEMMINGObserverSensor(motor);  // after motor: reads its KV and pole pairs
+#ifdef HALL_A_PIN
+static HallSensor hall = HallSensor(HALL_A_PIN, HALL_B_PIN, HALL_C_PIN, POLE_PAIRS);
+// interpolates between the 6 hall states per electrical revolution (sets its own phase correction)
+static SmoothingSensor smooth = SmoothingSensor(hall, motor);
+static void hallA() { hall.handleA(); }
+static void hallB() { hall.handleB(); }
+static void hallC() { hall.handleC(); }
+#endif
+int sensor_aligned = 0;
 
 volatile DebugVars dbg;
 float openloop_voltage = OPENLOOP_VOLTAGE;
@@ -240,6 +249,13 @@ static void updateDebug() {
   dbg.angle_err = e;
   dbg.fault = (uint32_t)fault;
   dbg.enabled = (uint32_t)motor.enabled;
+#ifdef HALL_A_PIN
+  dbg.hall = (uint32_t)hall.hall_state;
+  dbg.sensor_angle = sensor_aligned ? motor.electrical_angle : _normalizeAngle(hall.getMechanicalAngle() * POLE_PAIRS);
+#else
+  dbg.hall = 0;
+  dbg.sensor_angle = 0;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -291,12 +307,47 @@ static void doDeadtime(char* cmd) {
 
 static void doMotor(char* cmd) {
   command.motor(&motor, cmd);
-  // no position sensor: only the open loop motion controls are possible
   if (!isOpenLoop()) {
-    motor.controller = MotionControlType::velocity_openloop;
-    bench_io.println(F("No sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
+    if (!sensor_aligned) {
+      // no aligned position sensor: only the open loop motion controls are possible
+      motor.controller = MotionControlType::velocity_openloop;
+      bench_io.println(F("No aligned sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
+    } else if (motor.torque_controller != TorqueControlType::foc_current) {
+      // closed loop with current control only: in voltage mode the torque target is in volts (1 V ~ 2 A)
+      motor.torque_controller = TorqueControlType::foc_current;
+      bench_io.println(F("Closed loop: torque control forced to foc_current (MT2)"));
+    }
   }
 }
+
+#ifdef HALL_A_PIN
+static void printSensor() {
+  bench_io.print(F("hall state: "));      bench_io.println(hall.hall_state);
+  bench_io.print(F("hall sector: "));     bench_io.println(hall.electric_sector);
+  bench_io.print(F("aligned: "));         bench_io.println(sensor_aligned);
+  bench_io.print(F("zero el. angle: "));  bench_io.println(motor.zero_electric_angle, 4);
+  bench_io.print(F("direction: "));       bench_io.println((int)motor.sensor_direction);
+}
+
+// S: sensor state, SA: link the hall sensors and run the alignment (THE MOTOR MOVES, motor disabled after)
+static void doSensor(char* cmd) {
+  if (cmd[0] == 'A') {
+    if (motor.enabled) { bench_io.println(F("Disable the motor first (ME0)")); return; }
+    bench_io.println(F("Sensor alignment, the motor moves..."));
+    motor.linkSensor(&smooth);
+    motor.zero_electric_angle = NOT_SET;
+    motor.sensor_direction = Direction::UNKNOWN;
+    motor.enable();
+    motor.updateVoltageLimit(FOC_VOLTAGE_LIMIT);
+    int ok = motor.initFOC();
+    motor.disable();
+    sensor_aligned = ok ? 1 : 0;
+    updateVoltageLimit();
+    bench_io.println(ok ? F("Alignment done") : F("ALIGNMENT FAILED"));
+  }
+  printSensor();
+}
+#endif
 
 static void printSafety() {
   bench_io.print(F("timeout [s]: "));     bench_io.println(run_timeout_s);
@@ -403,6 +454,11 @@ void bench_setup() {
   dbg.magic = DBG_MAGIC;
   // observer in parallel (not linked): no alignment needed, angle of the flux = rotor d axis
   observer.init();
+#ifdef HALL_A_PIN
+  // hall sensors read from start-up (S command, dbg.hall) but linked to the motor only by SA
+  hall.init();
+  hall.enableInterrupts(hallA, hallB, hallC);
+#endif
 
   motor.useMonitoring(bench_io);
   motor.monitor_variables = 0;  // nothing streamed by default, read dbg with pyOCD
@@ -423,6 +479,9 @@ void bench_setup() {
   command.add('X', doSafety, "safety");
   command.add('R', doRecord, "record");
   command.add('P', doPing, "ping");
+#ifdef HALL_A_PIN
+  command.add('S', doSensor, "sensor");
+#endif
   command.verbose = VerboseMode::user_friendly;
   last_rx_ms = millis();
 }
@@ -431,6 +490,12 @@ void bench_step() {
   updateVoltageLimit();
   // observer before loopFOC: it integrates the voltage applied during the last period (motor.Ualpha/Ubeta)
   if (observer_on) observer.update();
+#ifdef HALL_A_PIN
+  if (!sensor_aligned) hall.update();  // not linked to the motor yet: update it here for the S command and dbg
+#endif
+#ifdef TORQUE_TARGET_MAX
+  if (motor.controller == MotionControlType::torque) motor.target = _constrain(motor.target, -TORQUE_TARGET_MAX, TORQUE_TARGET_MAX);
+#endif
   motor.loopFOC();
   motor.move();
   updateDebug();

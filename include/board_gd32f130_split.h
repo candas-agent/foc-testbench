@@ -46,6 +46,14 @@
 // 0.5 V would not align the rotor before the dead-time calibration. ~1 A expected at 1.5 V.
 #define ALIGN_VOLTAGE       1.5f    // [V]
 
+// Hall sensors of the motor (defines_2-0.h), interpolated by the SmoothingSensor of SimpleFOC drivers.
+// Not linked at start-up: the S command shows them, SA links them and runs the alignment (THE MOTOR MOVES),
+// then the closed loop modes are allowed.
+#define HALL_A_PIN          PB11
+#define HALL_B_PIN          PF1
+#define HALL_C_PIN          PC14
+#define TORQUE_TARGET_MAX   1.0f    // [A] closed loop torque mode: target clamped (a free wheel accelerates)
+
 // Commands and messages: SEGGER RTT through the ST-Link
 #define BENCH_USE_RTT
 
