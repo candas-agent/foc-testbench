@@ -2,6 +2,36 @@
 
 One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by git by default, add them explicitly if you want to share them).
 
+## Summary (2026-11-18)
+
+| | B-G431B-ESC1 | GD32F130 split board |
+|---|---|---|
+| Supply, PWM | 12 V, 25 kHz | 26 V, 16 kHz |
+| Programmed dead time | 0.8 µs (dead_zone 2 %) | 0.83 µs (60 cycles, fixed by the GD32 driver) |
+| Expected loss Vbus × dead time | 0.24 V | 0.35 V |
+| Calibrated compensation | 0.113 V (ratio 0.47) | 0.605 V (ratio 1.75) |
+| Effective dead time (comp / Vbus × T_pwm) | ~0.38 µs | **~1.45 µs** |
+| R estimated (motor + wires + switches) | 0.49 Ohm | 0.50 Ohm |
+| Best result | current mode 2 A: THD 5.3 % -> 2.3 % (mean of 4 pairs) | voltage mode 1.8 V / 2 A: THD 10.0 % -> 2.7 % |
+
+- **Why the GD32 board needs so much compensation**: its effective dead time is ~1.75 x the programmed one
+  (slow MOSFETs and gate drivers add switching delays; on the ESC1 the effective dead time is shorter than the
+  programmed one), the 26 V bus turns that time into a larger voltage, and the hoverboard motor needs only ~1 V
+  for 2 A: the ~0.6 V lost per phase is more than half of the useful voltage. At 0.6 V no current flows, at 0.9 V
+  the wheel only turns with the compensation. Consistent with the 0.7 V found by hand on a GD32 board in 2023
+  (SimpleFOC forum), and with halving the programmed dead time there (60 -> 30 cycles) only bringing it to 0.5 V.
+- **Lowering the programmed dead time** would reduce the loss but risks shoot-through with these slow switches:
+  the compensation is the safe way.
+- **Calibration**: within a factor ~2 of the best value on the ESC1 (0.11-0.24 V equivalent), close to the
+  value found by hand on the GD32 board. The 2x forum rule over-compensates on the ESC1.
+- **Compensation source**: on the setpoints (DM0, default) it is exactly 0 at zero torque. On the measured
+  currents (DM1, threshold >= compensation / R) the wheel felt freer at zero torque on the GD32 board, without
+  vibration: better for low torque use. One user, two runs.
+- **GD32 board specifics**: R_ds_on current sensing needs the driver enabled while the offsets are measured,
+  noise +-0.8 A; loop ~0.8-1.2 ms (no FPU), observer off, current controller at 100 Hz; hall alignment
+  2.09 rad / CCW from the split board sketch.
+- **Not done yet**: closed loop velocity tests with and without compensation, repeating the GD32 comparisons.
+
 ## Setup
 
 | Item | Value |
