@@ -150,3 +150,6 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - no compensation: iq sd 0.244 A, id sd 0.179 A
   - 0.605 V on setpoints (DM0): compensation stays exactly 0 as designed, iq sd 0.202 A, id sd 0.208 A
   - 0.605 V on measured currents (DM1, threshold 1.22 A): compensation sd 0.071 V, iq sd 0.155 A, id sd 0.227 A
+  - Repeated with motor "beeps" marking the phases (open loop 1.6 V at 60 rad/s for 0.3 s, N beeps before
+    phase N, one long beep at the end), wheel turned up to ~10 rad/s: iq sd 0.246 / 0.237 / 0.211 A,
+    id sd 0.195 / 0.189 / 0.177 A for no compensation / DM0 / DM1. No fault.
