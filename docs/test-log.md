@@ -37,6 +37,8 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
 | 2026-11-18 | MT2 (2 A) sweep | 2 | 0.24 | 0.3 | - | 1.49 | 6.5 | obs 4.90 deg (1 x Vbus*dt, dekutree64 rule) |
 | 2026-11-18 | MT2 (2 A) sweep | 2 | 0.48 | 0.3 | - | 2.21 | 6.0 | obs 7.74 deg (2 x Vbus*dt, 2023 forum rule) |
 | 2026-11-18 | GD32 calibration DC1.5 | 0 | - | 0.2 | 0.605 (ratio 1.75) | | | GD32F130 slave, 26 V, R est. 0.50 Ohm, min. threshold 1.22 A |
+| 2026-11-18 | GD32 MT0 1.2 V | 0.5 | 0 | 0.2 | - | 18.0 | 9.7 | fundamental 0.70 A, wheel turns with jerks |
+| 2026-11-18 | GD32 MT0 1.2 V, DE1 | 0.5 | 0.605 | 0.2 | 0.605 | 11.4 | 9.7 | fundamental 0.64 A |
 
 ## 2026-11-18: first power-up
 
@@ -117,3 +119,10 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
 - Calibration `DC1.5` (ALIGN_VOLTAGE 1.5 V on this board): R est. 0.50 Ohm, compensation **0.605 V**, ratio to
   Vbus*dead_zone (0.346 V) = 1.75, minimum threshold measured 1.22 A. Close to the 0.7 V found by hand in 2023
   on a GD32 board (SimpleFOC forum).
+- Open loop voltage mode, 0.5 rad/s (`ol_run.py --port rtt --env gd32f130`, live pyOCD reads, data/2026-11-18_gd32_voltage):
+  - 0.9 V: without compensation the wheel only oscillates, with 0.605 V it turns (user observation).
+  - 1.2 V without compensation: the wheel turns with jerks, fundamental current 0.70 A (as predicted from the
+    ~0.67 V/phase loss).
+  - 1.2 V with 0.605 V and equal fundamental (`--equal`, DE1): fundamental 0.64 A (the calibrated compensation
+    nearly matches the loss). Waveforms folded on the open loop angle (~8 periods): THD 18.0 % -> 11.4 %, the
+    plateaus at the zero crossings (~0 and ~180 deg) mostly gone. One run each.

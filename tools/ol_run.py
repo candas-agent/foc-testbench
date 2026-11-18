@@ -32,14 +32,19 @@ def main():
     p.add_argument("--current", type=float, default=None,
                    help="current amplitude in current mode [A] (MLC, default: firmware CURRENT_LIMIT)")
     p.add_argument("--comp", type=float, default=0.0, help="dead-time compensation [V]")
+    p.add_argument("--equal", action="store_true",
+                   help="voltage mode: lower the open loop voltage by 4/pi*comp (DE1), same fundamental as without "
+                        "compensation if the compensation matches the dead-time loss")
     p.add_argument("--duration", type=float, default=8.0, help="[s]")
     p.add_argument("--imax", type=float, default=3.0, help="software cut on any phase current [A]")
+    p.add_argument("--out", default=None, help="CSV of the live reads (t_s, ia, ib, comp_a, electrical_angle)")
     a = p.parse_args()
     elf = a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")
 
     peak = 0.0
     n = 0
     late = []  # dq values over the second half of the run (steady state)
+    rows = []  # live reads
     cut = None
     t0 = None
     out = ""
@@ -55,7 +60,7 @@ def main():
             time.sleep(0.05)
 
         try:
-            for cmd in ("ME0", "XC", "XH1", "MC3", "MT0" if a.mode == "voltage" else "MT2", "DE0",
+            for cmd in ("ME0", "XC", "XH1", "MC3", "MT0" if a.mode == "voltage" else "MT2", "DE1" if a.equal else "DE0",
                         f"D{a.comp:.4f}", f"DB{a.voltage}", f"M{a.speed}"):
                 send(cmd)
             if a.current is not None:
@@ -70,6 +75,7 @@ def main():
                     last_ping = time.perf_counter()
                 d = mem.read_dbg()
                 n += 1
+                rows.append((t, d["ia"], d["ib"], d["comp_a"], d["electrical_angle"]))
                 i = max(abs(d["ia"]), abs(d["ib"]), abs(d["ic"]))
                 peak = max(peak, i)
                 if t > a.duration / 2:
@@ -96,6 +102,26 @@ def main():
         m = [sum(v[k] for v in late) / len(late) for k in range(4)]
         print(f"second half mean: iq {m[0]:.3f} A, id {m[1]:.3f} A, uq {m[2]:.3f} V, ud {m[3]:.3f} V")
     print(f"open loop angle at the end: {final['electrical_angle']:.2f} rad el.")
+    # fundamental of the phase currents, synchronous with the open loop angle (least squares, second half):
+    # i = a*cos(angle) + b*sin(angle) + c -> amplitude sqrt(a^2 + b^2), robust to the measurement noise
+    half = [r for r in rows if r[0] > a.duration / 2]
+    if len(half) > 20:
+        import numpy as np
+        ang = np.array([r[4] for r in half])
+        X = np.column_stack([np.cos(ang), np.sin(ang), np.ones_like(ang)])
+        for name, col in (("ia", 1), ("ib", 2)):
+            y = np.array([r[col] for r in half])
+            coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+            fit = X @ coef
+            print(f"{name}: fundamental amplitude {np.hypot(coef[0], coef[1]):.3f} A, "
+                  f"residual rms {np.sqrt(np.mean((y - fit) ** 2)):.3f} A (noise + harmonics)")
+    if a.out:
+        import csv
+        with open(a.out, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["t_s", "ia", "ib", "comp_a", "electrical_angle"])
+            w.writerows(rows)
+        print(f"{len(rows)} reads -> {a.out}")
     if cut:
         print("STOPPED EARLY:", cut)
     for line in out.splitlines():
