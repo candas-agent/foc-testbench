@@ -2,8 +2,8 @@
 
 Test bench for the PWM dead-time compensation added to SimpleFOC (fork candas-agent/Arduino-FOC,
 branch feat/deadtime-compensation) and for the MXLEMMING observer fixes (fork candas-agent/Arduino-FOC-drivers,
-branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 + hoverboard motor (very low phase resistance, ~0.17 Ohm), no position sensor
-connected for now: open loop only.
+branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard split board + hoverboard motor
+(very low phase resistance, ~0.17 Ohm), no position sensor used for now: open loop only.
 
 ## Safety rules
 - Never flash the board or start/enable the motor without the user's explicit confirmation in the current session.
@@ -16,8 +16,15 @@ connected for now: open loop only.
   and only when the user says they are next to the bench. `test_static` does not move the motor but still flashes the board.
 - Keep the safety features (run timeout, overcurrent cut, heartbeat) enabled; never weaken them without asking.
 
+## GD32F130 split board (env `gd32f130`)
+- Supplied directly (no ideal diode): energy fed back by the motor goes to the supply, keep low speeds.
+  26 V supply. The bus voltage is only measured at start-up (`X` prints it), there is no overvoltage cut.
+- Commands go through RTT (tools `--port rtt --env gd32f130`), no serial port, no `pio test`.
+- Current sense on the MOSFETs R_ds_on: less accurate than the ESC1 shunts, check the offsets at power-up.
+- Dead time fixed by the GD32 driver (60 cycles, 0.83 us); DEAD_ZONE in the board file only serves the expected value.
+
 ## Workflow
-- Build: `pio run -e esc1`, flash: `pio run -e esc1 -t upload`.
+- Build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.
 - Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
 - Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).
 - Hardware setup, safety and recorder code: lib/testbench (shared by src/main.cpp and the tests).

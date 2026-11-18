@@ -1,12 +1,19 @@
 #include "bench.h"
 
+#ifdef BENCH_USE_RTT
+#include <RTTStream.h>
+static RTTStream rtt;
+Stream& bench_io = rtt;
+#else
+Stream& bench_io = Serial;
+#endif
+
 // Ld must be given: with 4 arguments only Lq is set, Ld stays NOT_SET (-12345) and tuneCurrentController()
 // then computes PID_current_d.P = -12345 * 2*pi*BW (positive feedback, instant overcurrent in foc_current)
 BLDCMotor motor = BLDCMotor(POLE_PAIRS, PHASE_RESISTANCE, KV_RATING, PHASE_INDUCTANCE, PHASE_INDUCTANCE);
-BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
-// gain calculation: https://community.simplefoc.com/t/b-g431b-esc1-current-control/521/21
-LowsideCurrentSense currentSense = LowsideCurrentSense(0.003f, -64.0f / 7.0f, A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
-Commander command = Commander(Serial);
+BLDCDriver6PWM driver = BLDCDriver6PWM(DRIVER_PINS);
+LowsideCurrentSense currentSense = LowsideCurrentSense(CS_SHUNT, CS_GAIN, CS_PINS);
+Commander command = Commander(bench_io);
 MXLEMMINGObserverSensor observer = MXLEMMINGObserverSensor(motor);  // after motor: reads its KV and pole pairs
 
 volatile DebugVars dbg;
@@ -68,8 +75,8 @@ static void updateVoltageLimit() {
 float bench_calibrate(float max_current) {
   if (max_current <= 0) max_current = CALIB_MAX_CURRENT;
   if (max_current > CALIB_MAX_CURRENT_LIMIT) max_current = CALIB_MAX_CURRENT_LIMIT;
-  Serial.print(F("Dead-time calibration, max current [A]: "));
-  Serial.println(max_current, 3);
+  bench_io.print(F("Dead-time calibration, max current [A]: "));
+  bench_io.println(max_current, 3);
   bool en = motor.enabled;
   if (!en) motor.enable();
   motor.updateVoltageLimit(FOC_VOLTAGE_LIMIT);
@@ -77,12 +84,12 @@ float bench_calibrate(float max_current) {
   updateVoltageLimit();
   if (!en) motor.disable();
   if (_isset(udt)) {
-    Serial.print(F("Measured compensation [V]: "));
-    Serial.println(udt, 4);
-    Serial.print(F("Ratio to Vbus*dead_zone: "));
-    Serial.println(udt / (SUPPLY_VOLTAGE * DEAD_ZONE), 3);
+    bench_io.print(F("Measured compensation [V]: "));
+    bench_io.println(udt, 4);
+    bench_io.print(F("Ratio to Vbus*dead_zone: "));
+    bench_io.println(udt / (SUPPLY_VOLTAGE * DEAD_ZONE), 3);
   } else {
-    Serial.println(F("Calibration failed"));
+    bench_io.println(F("Calibration failed"));
   }
   return udt;
 }
@@ -138,7 +145,7 @@ static void rec_update() {
     if (rec_auto_dump) {
       // dumping blocks the loop: stop the motor first (open loop would stall)
       bench_disable(F("recording done"));
-      rec_dump(Serial);
+      rec_dump(bench_io);
     }
   }
 }
@@ -179,8 +186,8 @@ void bench_disable(const __FlashStringHelper* reason) {
   motor.disable();
   was_enabled = 0;
   if (reason) {
-    Serial.print(F("MOTOR DISABLED: "));
-    Serial.println(reason);
+    bench_io.print(F("MOTOR DISABLED: "));
+    bench_io.println(reason);
   }
 }
 
@@ -239,12 +246,12 @@ static void updateDebug() {
 static bool hasArg(const char* p) { return *p != '\0' && *p != '\n' && *p != '\r'; }
 
 static void printDeadtime() {
-  Serial.print(F("comp [V]: "));       Serial.println(motor.deadtime_compensation, 4);
-  Serial.print(F("threshold: "));      Serial.println(motor.deadtime_comp_threshold, 4);
-  Serial.print(F("use measured: "));   Serial.println(motor.deadtime_comp_use_measured);
-  Serial.print(F("equal ampl.: "));    Serial.println(equal_amplitude);
-  Serial.print(F("openloop U [V]: ")); Serial.println(openloop_voltage, 4);
-  Serial.print(F("expected Vbus*dead_zone [V]: ")); Serial.println(SUPPLY_VOLTAGE * DEAD_ZONE, 4);
+  bench_io.print(F("comp [V]: "));       bench_io.println(motor.deadtime_compensation, 4);
+  bench_io.print(F("threshold: "));      bench_io.println(motor.deadtime_comp_threshold, 4);
+  bench_io.print(F("use measured: "));   bench_io.println(motor.deadtime_comp_use_measured);
+  bench_io.print(F("equal ampl.: "));    bench_io.println(equal_amplitude);
+  bench_io.print(F("openloop U [V]: ")); bench_io.println(openloop_voltage, 4);
+  bench_io.print(F("expected Vbus*dead_zone [V]: ")); bench_io.println(SUPPLY_VOLTAGE * DEAD_ZONE, 4);
 }
 
 static void doDeadtime(char* cmd) {
@@ -257,11 +264,11 @@ static void doDeadtime(char* cmd) {
       break;
     case 'M':  // use measured currents (foc_current)
       if (hasArg(cmd + 1)) motor.deadtime_comp_use_measured = atoi(cmd + 1) ? 1 : 0;
-      Serial.println(motor.deadtime_comp_use_measured);
+      bench_io.println(motor.deadtime_comp_use_measured);
       break;
     case 'E':  // equal amplitude in open loop
       if (hasArg(cmd + 1)) equal_amplitude = atoi(cmd + 1) ? 1 : 0;
-      Serial.println(equal_amplitude);
+      bench_io.println(equal_amplitude);
       break;
     case 'B':  // open loop voltage amplitude
       command.scalar(&openloop_voltage, cmd + 1);
@@ -280,15 +287,36 @@ static void doMotor(char* cmd) {
   // no position sensor: only the open loop motion controls are possible
   if (!isOpenLoop()) {
     motor.controller = MotionControlType::velocity_openloop;
-    Serial.println(F("No sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
+    bench_io.println(F("No sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
   }
 }
 
 static void printSafety() {
-  Serial.print(F("timeout [s]: "));     Serial.println(run_timeout_s);
-  Serial.print(F("overcurrent [A]: ")); Serial.println(overcurrent_a, 2);
-  Serial.print(F("heartbeat: "));       Serial.println(heartbeat_on);
-  Serial.print(F("last fault: "));      Serial.println(fault);
+  bench_io.print(F("timeout [s]: "));     bench_io.println(run_timeout_s);
+  bench_io.print(F("overcurrent [A]: ")); bench_io.println(overcurrent_a, 2);
+  bench_io.print(F("heartbeat: "));       bench_io.println(heartbeat_on);
+  bench_io.print(F("last fault: "));      bench_io.println(fault);
+  bench_io.print(F("Vbus at start-up [V]: ")); bench_io.println(dbg.vbus, 2);
+}
+
+// bus voltage, measured once before the current sense takes the ADC
+static void measureVbus() {
+#ifdef VBUS_PIN
+  pinMode(VBUS_PIN, INPUT_ANALOG);
+  float sum = 0;
+  const int n = 16;
+  for (int k = 0; k < n; k++) sum += analogRead(VBUS_PIN);
+  // Arduino analogRead: 10 bit by default
+  dbg.vbus = sum / n / 1023.0f * 3.3f * VBUS_GAIN;
+  bench_io.print(F("Vbus measured [V]: "));
+  bench_io.println(dbg.vbus, 2);
+  if (fabsf(dbg.vbus - SUPPLY_VOLTAGE) > VBUS_TOLERANCE * SUPPLY_VOLTAGE) {
+    bench_io.print(F("WARNING: Vbus differs from SUPPLY_VOLTAGE = "));
+    bench_io.println(SUPPLY_VOLTAGE, 1);
+  }
+#else
+  dbg.vbus = NAN;
+#endif
 }
 
 static void doSafety(char* cmd) {
@@ -305,20 +333,29 @@ static void doSafety(char* cmd) {
 static void doPing(char*) {}  // heartbeat, silent
 
 static void doRecord(char* cmd) {
-  if (cmd[0] == 'D') { rec_dump(Serial); return; }  // RD: dump the last recording
+  if (cmd[0] == 'D') { rec_dump(bench_io); return; }  // RD: dump the last recording
   bool dump = true;
   if (cmd[0] == 'N') { dump = false; cmd++; }       // RN: no serial dump (read with pyOCD)
   uint32_t period = hasArg(cmd) ? (uint32_t)atol(cmd) : 1000;
-  Serial.print(F("Recording, period [us]: "));
-  Serial.println(period);
+  bench_io.print(F("Recording, period [us]: "));
+  bench_io.println(period);
   rec_start(period, dump);
 }
 
 // ---------------------------------------------------------------------------
 void bench_setup() {
-  Serial.begin(115200);
-  SimpleFOCDebug::enable(&Serial);
+#ifdef SELF_HOLD_PIN
+  // power latch first: the board switches itself off when the power button is released
+  pinMode(SELF_HOLD_PIN, OUTPUT);
+  digitalWrite(SELF_HOLD_PIN, HIGH);
+#endif
+#ifndef BENCH_USE_RTT
+  Serial.begin(BENCH_SERIAL_BAUD);
+#endif
+  SimpleFOCDebug::enable(&bench_io);
   _delay(1000);
+  bench_io.println(F("FOC test bench, board: " BOARD_NAME));
+  measureVbus();
 
   // no position sensor linked: open loop only
 
@@ -328,7 +365,7 @@ void bench_setup() {
   driver.init();
   motor.linkDriver(&driver);
 
-  // current sense (B-G431B-ESC1: phases are known, no alignment needed)
+  // current sense: the phases are wired to known pins, no alignment needed
   currentSense.linkDriver(&driver);
   currentSense.init();
   currentSense.skip_align = true;
@@ -353,7 +390,7 @@ void bench_setup() {
   // observer in parallel (not linked): no alignment needed, angle of the flux = rotor d axis
   observer.init();
 
-  motor.useMonitoring(Serial);
+  motor.useMonitoring(bench_io);
   motor.monitor_variables = 0;  // nothing streamed by default, read dbg with pyOCD
 
   motor.init();
@@ -389,6 +426,6 @@ void bench_step() {
 
 void bench_loop() {
   bench_step();
-  if (Serial.available()) last_rx_ms = millis();
+  if (bench_io.available()) last_rx_ms = millis();
   command.run();
 }

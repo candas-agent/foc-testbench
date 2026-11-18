@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 MODES = {"voltage": "MT0", "current": "MT2"}
 POLE_PAIRS = 15
-RECORD_SAMPLES = 800          # include/config.h
+RECORD_SAMPLES = 800          # ESC1 (include/board_esc1.h); with pyOCD the size is read from the ELF
 PERIODS_PER_RECORD = 4
 BEMF_V_PER_RADS = 0.32        # phase peak back-EMF per mechanical rad/s (KV 17, 15 pole pairs)
 
@@ -51,9 +51,20 @@ def angle_ripple(err):
     return float(np.sqrt(np.mean(d ** 2)))
 
 
+def open_port(port, mem=None, baud=115200):
+    """serial port name, or "rtt" (SEGGER RTT through the debug probe, needs the BoardMemory session)"""
+    if port.lower() == "rtt":
+        from board_mem import RttPort
+        if mem is None:
+            raise RuntimeError("--port rtt needs the pyOCD session")
+        return RttPort(mem)
+    return serial.Serial(port, baud, timeout=0.1)
+
+
 class Bench:
-    def __init__(self, port, baud=115200):
-        self.ser = serial.Serial(port, baud, timeout=0.1)
+    def __init__(self, port, mem=None, baud=115200):
+        self.ser = open_port(port, mem, baud)
+        self.rtt = port.lower() == "rtt"
         self.last_ping = 0
 
     def send(self, cmd):
@@ -127,7 +138,8 @@ class Bench:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--port", required=True)
+    p.add_argument("--port", required=True, help='serial port (ESC1) or "rtt" (GD32 board, through the ST-Link)')
+    p.add_argument("--env", default="esc1", help="PlatformIO environment of the flashed firmware (for the ELF)")
     p.add_argument("--speeds", nargs="+", type=float, default=[0.5, 2.0], help="open loop velocities [rad/s]")
     p.add_argument("--comps", nargs="+", default=["0", "cal"], help='compensation values [V] or "cal"')
     p.add_argument("--modes", nargs="+", default=["voltage", "current"], choices=list(MODES))
@@ -135,9 +147,12 @@ def main():
     p.add_argument("--settle", type=float, default=2.0, help="settling time before recording [s]")
     p.add_argument("--ol-voltage", type=float, default=0.3, help="open loop voltage amplitude in voltage mode [V]")
     p.add_argument("--via", choices=["serial", "pyocd"], default="serial", help="how to read the recordings")
-    p.add_argument("--elf", default=os.path.join(".pio", "build", "esc1", "firmware.elf"))
+    p.add_argument("--elf", default=None, help="firmware ELF (default .pio/build/<env>/firmware.elf)")
     p.add_argument("--out", default=None, help="output folder (default data/<date-time>)")
     a = p.parse_args()
+    a.elf = a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")
+    if a.port.lower() == "rtt":
+        a.via = "pyocd"  # the pyOCD session is open anyway, read the recordings from memory
 
     out = a.out or os.path.join("data", datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
     os.makedirs(out, exist_ok=True)
@@ -146,14 +161,17 @@ def main():
     if input("Start? [y/N] ").strip().lower() != "y":
         return
 
-    bench = Bench(a.port)
     results = []
     mem = None
+    record_samples = RECORD_SAMPLES
     if a.via == "pyocd":
         from board_mem import BoardMemory
         mem = BoardMemory(a.elf).__enter__()
+        record_samples = mem.rec_capacity
+    bench = Bench(a.port, mem)
     try:
-        time.sleep(2)  # board reset on serial open
+        if not bench.rtt:
+            time.sleep(2)  # board reset on serial open
         bench.ser.reset_input_buffer()
         bench.send("ME0")
         bench.send("XC")
@@ -179,7 +197,7 @@ def main():
                           f"too close to the open loop voltage {a.ol_voltage} V")
                     continue
                 f_el = speed * POLE_PAIRS / (2 * math.pi)
-                period_us = int(PERIODS_PER_RECORD / f_el * 1e6 / RECORD_SAMPLES)
+                period_us = int(PERIODS_PER_RECORD / f_el * 1e6 / record_samples)
                 for label, value in comps:
                     name = f"{mode}_v{speed:g}_comp{label}"
                     print(f"\n== {name} (comp {value:.4f} V)")

@@ -18,12 +18,14 @@ from board_mem import BoardMemory, DBG_FIELDS  # noqa: E402
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--elf", default=os.path.join(".pio", "build", "esc1", "firmware.elf"))
+    p.add_argument("--env", default="esc1", help="PlatformIO environment of the flashed firmware (for the ELF)")
+    p.add_argument("--elf", default=None, help="firmware ELF (default .pio/build/<env>/firmware.elf)")
     p.add_argument("--duration", type=float, default=5.0, help="[s]")
     p.add_argument("--fields", nargs="+", default=[f for f in DBG_FIELDS if f != "magic"])
     p.add_argument("--out", default="live.csv")
     p.add_argument("--print", action="store_true", help="also print the values")
     a = p.parse_args()
+    a.elf = a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")
 
     unknown = set(a.fields) - set(DBG_FIELDS)
     if unknown:

@@ -2,8 +2,9 @@
 /**
  * Test bench core, shared by the interactive firmware (src/main.cpp) and the pio tests (test/).
  *
- * Hardware: B-G431B-ESC1 + hoverboard motor, no position sensor (open loop only).
- * Safety: run timeout, overcurrent cut, optional serial heartbeat (see config.h).
+ * Hardware: hoverboard motor on a B-G431B-ESC1 or a GD32F130 split board (include/board_*.h),
+ * no position sensor used (open loop only).
+ * Safety: run timeout, overcurrent cut, optional heartbeat (see config.h).
  */
 #include <Arduino.h>
 #include <SimpleFOC.h>
@@ -14,12 +15,14 @@ extern BLDCMotor motor;
 extern BLDCDriver6PWM driver;
 extern LowsideCurrentSense currentSense;
 extern Commander command;
+// commands and messages: Serial (ESC1 virtual COM port) or RTT (GD32 board, through the ST-Link)
+extern Stream& bench_io;
 // MXLEMMING sensorless observer, NOT linked to the motor: runs in parallel to the open loop
 extern MXLEMMINGObserverSensor observer;
 
 // Variables read with pyOCD (global, volatile so they are never optimised away)
 // The layout is mirrored in tools/board_mem.py: update both together (DBG_MAGIC checks the version).
-#define DBG_MAGIC 0xF0CDB002u
+#define DBG_MAGIC 0xF0CDB003u
 struct DebugVars {
   uint32_t magic;                // DBG_MAGIC
   float ia, ib, ic;              // measured phase currents [A]
@@ -33,6 +36,7 @@ struct DebugVars {
   float angle_err;               // observer angle - open loop angle, wrapped to [-pi, pi] [rad]
   uint32_t fault;                // last safety fault (0 none, 1 timeout, 2 overcurrent, 3 heartbeat)
   uint32_t enabled;              // motor enabled
+  float vbus;                    // bus voltage measured at start-up [V], NAN if the board has no measurement
 };
 extern volatile DebugVars dbg;
 

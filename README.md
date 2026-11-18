@@ -29,10 +29,25 @@ The compensation adds `±deadtime_compensation` to each phase voltage in the dir
 
 ## Hardware
 
-- B-G431B-ESC1 (on-board ST-Link, low-side current sensing with the STM32G4 op-amps)
-- Hoverboard motor, 15 pole pairs (hall sensors not connected: open loop only)
+Two boards are supported, selected by the PlatformIO environment (board settings in `include/board_*.h`):
+
+| Env | Board | Commands | Notes |
+|---|---|---|---|
+| `esc1` | B-G431B-ESC1 | serial (ST-Link virtual COM port) | low-side current sensing with the STM32G4 op-amps, 12 V |
+| `gd32f130` | hoverboard split board TT-SD2.2 "master" (GD32F130C8) | RTT through an ST-Link (`--port rtt`) | current sensing on the low side MOSFETs R_ds_on (2 phases), 26 V, fixed 0.83 µs dead time |
+
+- Hoverboard motor, 15 pole pairs (hall sensors not used: open loop only)
 - **Lab power supply with current limit**
 - Optional: oscilloscope
+
+### GD32F130 split board
+
+- Driver: `Candas1/Arduino-FOC#dev-gd32` (synced with SimpleFOC master) merged with the compensation, branch `candas-agent/Arduino-FOC#test/gd32-deadtime`. The driver ignores `dead_zone` and sets a fixed `DEAD_TIME` of 60 cycles (0.83 µs, 1.33 % at 16 kHz): `DEAD_ZONE` in `board_gd32f130_split.h` only serves the expected value `Vbus × dead_zone`.
+- Power latch: the board switches itself off without the power button. On the bench, bridge the 2 pins of the switch connector; the firmware also holds PB2 high.
+- ST-Link: GND, SWDIO, SWCLK on the 4-pin debug header next to the MCU. Do not connect the ST-Link 3.3 V when the board is powered.
+- No ideal diode on the supply here: energy fed back by the motor goes to the supply. Keep low speeds and don't spin the wheel fast by hand. The bus voltage is measured once at start-up only (PA4), the ADC is then used by the current sense.
+- 8 KB of RAM: the recorder holds 100 samples (`RECORD_SAMPLES`), the tools read the size from the ELF. `pio test` is not available (no serial port).
+- Commands: same as below, through RTT: `python tools/ol_run.py --port rtt --env gd32f130 ...`, `python tools/campaign.py --port rtt --env gd32f130 ...`.
 
 ### Safety
 
@@ -41,7 +56,7 @@ The phase resistance of a hoverboard motor is very low (~0.17 Ω): in open loop 
 ## Software setup
 
 1. Install [PlatformIO](https://platformio.org/).
-2. Adapt [`include/config.h`](include/config.h): motor parameters and the **real measured supply voltage** (the compensation volts are converted to duty cycle with it).
+2. Adapt [`include/config.h`](include/config.h) (motor, limits) and the board file `include/board_esc1.h` or `include/board_gd32f130_split.h`: the **real measured supply voltage** (the compensation volts are converted to duty cycle with it).
 3. Build and flash:
    ```
    pio run -e esc1 -t upload

@@ -5,6 +5,7 @@ THE MOTOR MOVES: only run it when someone is next to the bench.
 
   python tools/ol_run.py --port COM8 --voltage 0.6 --speed 0.5 --duration 8
   python tools/ol_run.py --port COM8 --mode current --speed 2 --duration 8
+  python tools/ol_run.py --port rtt --env gd32f130 --mode current --current 1 --speed 2 --duration 6
 
 The heartbeat is enabled: the board disables the motor if this script stops.
 The motor is always disabled at the end (ME0), also on error or Ctrl+C.
@@ -17,13 +18,14 @@ import time
 import serial
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from board_mem import BoardMemory  # noqa: E402
+from board_mem import BoardMemory, RttPort  # noqa: E402
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--port", required=True)
-    p.add_argument("--elf", default=os.path.join(".pio", "build", "esc1", "firmware.elf"))
+    p.add_argument("--port", required=True, help='serial port (ESC1) or "rtt" (GD32 board, through the ST-Link)')
+    p.add_argument("--env", default="esc1", help="PlatformIO environment of the flashed firmware (for the ELF)")
+    p.add_argument("--elf", default=None, help="firmware ELF (default .pio/build/<env>/firmware.elf)")
     p.add_argument("--mode", choices=["voltage", "current"], default="voltage")
     p.add_argument("--voltage", type=float, default=0.3, help="open loop voltage amplitude in voltage mode [V]")
     p.add_argument("--speed", type=float, default=0.5, help="open loop velocity [rad/s]")
@@ -33,20 +35,26 @@ def main():
     p.add_argument("--duration", type=float, default=8.0, help="[s]")
     p.add_argument("--imax", type=float, default=3.0, help="software cut on any phase current [A]")
     a = p.parse_args()
-
-    ser = serial.Serial(a.port, 115200, timeout=0.05)
-
-    def send(cmd):
-        ser.write((cmd + "\n").encode())
-        time.sleep(0.05)
+    elf = a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")
 
     peak = 0.0
     n = 0
     late = []  # dq values over the second half of the run (steady state)
     cut = None
     t0 = None
-    try:
-        with BoardMemory(a.elf) as mem:
+    out = ""
+    # one pyOCD session for the memory reads and, with --port rtt, for the commands
+    with BoardMemory(elf) as mem:
+        if a.port.lower() == "rtt":
+            ser = RttPort(mem, timeout=0.05)
+        else:
+            ser = serial.Serial(a.port, 115200, timeout=0.05)
+
+        def send(cmd):
+            ser.write((cmd + "\n").encode())
+            time.sleep(0.05)
+
+        try:
             for cmd in ("ME0", "XC", "XH1", "MC3", "MT0" if a.mode == "voltage" else "MT2", "DE0",
                         f"D{a.comp:.4f}", f"DB{a.voltage}", f"M{a.speed}"):
                 send(cmd)
@@ -72,14 +80,14 @@ def main():
                 if d["fault"]:
                     cut = f"board fault {int(d['fault'])} at t={t:.2f} s"
                     break
-            # disable now: closing the pyOCD session takes longer than the heartbeat timeout
+        finally:
+            # disable before closing the pyOCD session (closing takes longer than the heartbeat timeout)
             send("ME0")
+            send("XH0")
             final = mem.read_dbg()
-    finally:
-        send("ME0")
-        send("XH0")
-        out = ser.read(8192).decode(errors="replace")
-        ser.close()
+            time.sleep(0.1)
+            out = ser.read(8192).decode(errors="replace")
+            ser.close()
 
     print(f"{a.mode} mode, {a.voltage if a.mode == 'voltage' else 'current_limit'} "
           f"{'V' if a.mode == 'voltage' else ''}, {a.speed} rad/s, comp {a.comp} V")

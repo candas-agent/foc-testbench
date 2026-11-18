@@ -3,16 +3,18 @@
 // Test bench configuration - adapt to your motor and power supply
 // ---------------------------------------------------------------------------
 
+// Board: power stage, pins, current sense, communication, recorder size (selected by the PlatformIO env)
+#if defined(BOARD_GD32F130_SPLIT)
+#include "board_gd32f130_split.h"
+#else
+#include "board_esc1.h"
+#endif
+
 // Motor (hoverboard motor, values from the MXLEMMING observer README example) - no position sensor
 #define POLE_PAIRS          15
 #define PHASE_RESISTANCE    0.1664f      // [Ohm] phase resistance
 #define KV_RATING           17.0f        // [rpm/V]
 #define PHASE_INDUCTANCE    0.00036858f  // [H]
-
-// Power stage
-#define SUPPLY_VOLTAGE      12.0f   // [V] set the REAL measured supply voltage, the compensation volts are scaled with it
-#define BENCH_PWM_FREQUENCY 25000   // [Hz]
-#define DEAD_ZONE           0.02f   // dead-time as a fraction of the PWM period (SimpleFOC default)
 
 // Limits - the phase resistance is very low: I ~ U / R, 1 V is already ~6 A !
 #define ALIGN_VOLTAGE       0.5f    // [V] rotor alignment before the dead-time calibration (~3 A)
@@ -38,6 +40,3 @@
 #define OVERCURRENT_SAMPLES   10
 #define HEARTBEAT_TIMEOUT_MS  2000    // [ms] when the heartbeat is on (XH1), disable if no command received for this time
 #define CALIB_MAX_CURRENT_LIMIT 2.0f  // [A] the calibration current is clamped to this value
-
-// Recorder (R command): samples stored in RAM then dumped as CSV over serial
-#define RECORD_SAMPLES        800     // 16 bytes each
