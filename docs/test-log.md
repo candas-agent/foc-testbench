@@ -39,6 +39,8 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
 | 2026-11-18 | GD32 calibration DC1.5 | 0 | - | 0.2 | 0.605 (ratio 1.75) | | | GD32F130 slave, 26 V, R est. 0.50 Ohm, min. threshold 1.22 A |
 | 2026-11-18 | GD32 MT0 1.2 V | 0.5 | 0 | 0.2 | - | 18.0 | 9.7 | fundamental 0.70 A, wheel turns with jerks |
 | 2026-11-18 | GD32 MT0 1.2 V, DE1 | 0.5 | 0.605 | 0.2 | 0.605 | 11.4 | 9.7 | fundamental 0.64 A |
+| 2026-11-18 | GD32 MT0 1.8 V | 0.5 | 0 | 0.2 | - | 10.0 | 13.9 | fundamental 2.05 A, 12 s |
+| 2026-11-18 | GD32 MT0 1.8 V, DE1 | 0.5 | 0.605 | 0.2 | 0.605 | 2.7 | 8.3 | fundamental 2.02 A, 12 s, fewer jerks |
 
 ## 2026-11-18: first power-up
 
@@ -126,3 +128,7 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - 1.2 V with 0.605 V and equal fundamental (`--equal`, DE1): fundamental 0.64 A (the calibrated compensation
     nearly matches the loss). Waveforms folded on the open loop angle (~8 periods): THD 18.0 % -> 11.4 %, the
     plateaus at the zero crossings (~0 and ~180 deg) mostly gone. One run each.
+  - 1.8 V, 12 s each, script cut 3.5 A: fundamental 2.05 A without, 2.02 A with 0.605 V and equal fundamental.
+    THD 10.0 % -> **2.7 %**, |i|<10 % 13.9 % -> 8.3 % (pure sine 6.4 %): without compensation the current is
+    trapezoidal (flat tops, kink at the zero crossing), with it close to a sine. Residual noise rms 0.24 -> 0.20 A.
+    The user felt fewer jerks with compensation (also at 1.2 V), some remain (cogging, open loop). One run each.
