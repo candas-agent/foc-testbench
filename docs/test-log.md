@@ -153,3 +153,6 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - Repeated with motor "beeps" marking the phases (open loop 1.6 V at 60 rad/s for 0.3 s, N beeps before
     phase N, one long beep at the end), wheel turned up to ~10 rad/s: iq sd 0.246 / 0.237 / 0.211 A,
     id sd 0.195 / 0.189 / 0.177 A for no compensation / DM0 / DM1. No fault.
+  - User feel (repeated test): less resistance when turning the wheel with the compensation on measured
+    currents (DM1, threshold 1.22 A); no difference expected nor felt with DM0 (0 at zero torque by design).
+    Consistent with the lower iq fluctuations in both runs. No vibration caused by DM1 with this threshold.
