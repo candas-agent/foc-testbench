@@ -874,3 +874,24 @@ ud(th) = c + A cos th + B sin th on ~3800 samples per direction (+-0.0017 V on A
   sign dependent effect.
 - `XO<da>,<db>` now shifts the measured currents by hand (XO alone still re-centres at 0 V). Not applied yet
   (needs a reflash): XO then XO-0.020,-0.005, check with offset_ripple.py, map the stalls again.
+
+### Running offset correction applied (XO then XO-0.020,-0.005), checked, stalls mapped
+
+After a reflash: offset at 0 V -0.027 / -0.026 A, XO -> -0.007 / -0.005 A, then the measured currents shifted by
+-0.020 / -0.005 A. offset_ripple.py again: +3 rad/s ia -0.015 ib -0.031, -3 rad/s ia -0.049 ib +0.025, mean
+ia -0.032 ib -0.003 A, instead of ~0: **the ud ripple estimate is not reproducible** (each direction moved by
+30-90 mA between two runs with similar offsets), it cannot be used to correct the offsets as it is.
+
+Stall map with this shift (data/2026-11-20/stall_map_shift_edges.csv), mean sector time / nominal:
+
+| hall state | 1 | 5 | 4 | 6 | 2 | 3 | stalls |
+|---|---|---|---|---|---|---|---|
+| forward | 0.60 | 0.76 | **1.46** | **1.54** | 1.12 | 0.80 | 23 |
+| backward | 1.03 | **2.17** | 0.99 | 0.57 | 0.61 | 0.91 | 50 |
+
+- The forward slow sector moved again (2/3 -> 4/6) with a 0.02 A shift, the backward one stayed on state 5.
+  Stalls over the three maps (forward + backward, 12 turns each): 104 (boot offsets, warm) -> 92 (XO) -> 73 (XO + shift).
+- Conclusion for now: at 1 rad/s the stall location is decided by current errors of a few tens of mA (R_ds_on sense,
+  sample sd ~0.18 A), which drift and are not separable from other 1x effects with the bench data alone. An
+  independent current reference is needed to go further (scope + current probe on one phase), or a board with real
+  shunts. Speeds >= 2 rad/s are fine with compensation + hall decay + soft PI.
