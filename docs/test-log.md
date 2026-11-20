@@ -990,3 +990,28 @@ Sensor::getPreciseAngle(), not called in the loop. Nothing to fix in the library
 Remaining levers on the F103: fewer float divisions per loop (LowPassFilter alpha = Tf/(Tf+dt) on every call, PID
 derivative / dt, HallSensor velocity, setPwm / voltage_power_supply x3), libgcc float routines and hot code in RAM
 (no wait states), fixed point (not upstreamable).
+
+## 2026-11-20 - STM32F103: where the loop time goes, code in RAM (slower)
+
+**PC profile** (tools/perf_run.py --pc 3000: DWT_PCSR sampled while running at 2 rad/s, perf_dev_f103):
+~70 % of the CPU time is in the libgcc soft float routines: __aeabi_fadd 16.7 %, __mulsf3 15.2 %, __divsf3 9.1 %,
+float compares ~20 % (__nesf2 9.0 %, __aeabi_cfcmple 7.5 %, __aeabi_fcmp* ~4 %), int to float __floatdisf 3.7 % /
+__floatsisf 2.9 %. Then PIDController 2.8 %, getCurrentMicros 2.7 %, LowPassFilter 1.6 %, _sin 1.3 %, fmodf 1.1 %.
+The compares come from `_constrain` and `_isset` (`!= NOT_SET`, float) on every loop: direct call sites in
+FOCMotor::loopFOC (18), BLDCDriver6PWM::setPwm (12), _writeDutyCycle6PWM (12), PIDController (12),
+BLDCMotor::setPhaseVoltage (6), CurrentSense::getABCurrents (5), LowsideCurrentSense::getPhaseCurrents (3).
+Each soft float compare goes through 2-3 libgcc functions.
+
+**Code in RAM** (ld/f103rc_ram_libgcc.ld, ld/f103rc_ram_hot.ld: copies of the core ldscript, the objects moved to
+.data with EXCLUDE_FILE; data/2026-11-20/perf_ram.csv):
+
+| firmware | loopFOC [us] | move [us] | total [us] | RAM used |
+|---|---|---|---|---|
+| perf_dev_f103 (all in flash) | 297.1 | 80.8 | 430.9 | 44.3 % |
+| perf_ramgcc_f103 (libgcc float in RAM) | 357.6 (+20 %) | 97.4 | 516.0 | 47.6 % |
+| perf_ramhot_f103 (libgcc float + loop files in RAM, +23 KB) | 307.8 (+3.6 %) | 83.7 | 447.0 | 94.5 % |
+
+Slower: on the F1 the Cortex-M3 fetches code from SRAM through the system bus (no flash prefetch, shared with the
+data accesses), and calls between flash and RAM go through long branch veneers (3-5 % of the samples). With 2 wait
+states and the prefetch, the flash is the fastest place. Not worth it; the GD32F103 advantage is its zero wait
+state flash, not reproducible on the STM32F103.
