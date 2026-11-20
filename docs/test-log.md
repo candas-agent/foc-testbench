@@ -1039,3 +1039,8 @@ tools/perf_run.py at 2 rad/s, 10 XP reads of 256 loops, dev and the combined fir
 
 The gains add up (10.8 + 23.4 + 7.9 = 42.1 us vs 41.7 measured), repeatable to 0.2 us. They pay the dead-time
 compensation cost (+31 us) with 11 us to spare. RAM unchanged. move unchanged (none of them touch it).
+
+Re-measured after renaming the dt overloads to explicit `filter(x, dt)` / `compute(error, dt)` (perf/loopfoc-dt-once
+79aee30; 176b773 only adds a comment): dev 297.1 us, branch 273.5 us (-23.6 us, -7.9 %), flash +160 B, RAM same.
+Same design as discussed in simplefoc#325 (yours, 2023: dekutree64 overload, runger "sample the clock once",
+Copper280z API compatible split); only the 4 current filters / PIDs of loopFOC, not the sensor / velocity ones.
