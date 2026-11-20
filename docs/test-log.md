@@ -643,3 +643,29 @@ Stalls -64 % forward, -76 % backward; current ripple -33 / -40 %; 5 rad/s identi
 ~8 % low at 2 rad/s in both (not addressed by this change). One dev run at -2 rad/s shows a 1.37 s gap with 8 skipped
 hall states and only 103 net edges while the estimated velocity and iq stayed normal: most likely a pyOCD read
 stall on the PC, not the wheel (its stall count, 21, is in line with the other dev runs).
+
+## 2026-11-20 - Dead-time compensation on the STM32F103 board (alone, on SimpleFOC dev)
+
+Firmware `dt_f103`: candas-agent `feat/deadtime-compensation-dev` (d0f4aa3) = SimpleFOC dev ae7b3ad + the compensation
+commit only (52c1205, cherry-picked: the original `feat/deadtime-compensation` was based on master b3d8f39, 56 commits
+behind dev). Plain HallSensor velocity of dev (no decay), drivers dev, 16 kHz, dead_zone 1 %, 26 V.
+
+**Calibration** (`DC1.5`, twice): 0.382 / 0.375 V, ratio 1.47 / 1.44 to Vbus x dead_zone (0.26 V), R 0.57 Ohm.
+Effective dead time ~1.45 x the programmed one (GD32F130 board: 1.75, ESC1: 0.47).
+
+**Low speed A/B** in the same firmware, compensation 0 vs 0.38 V switched at run time (`D<volts>`, setpoint source
+DM0, threshold 0.2 A), `lowspeed_campaign.py --dt 0,0.38`, 3 passes with alternating order, PI P 0.4 I 1 Tf 0.01
+(data/2026-11-20/dt_f103_ab.csv):
+
+| | 2 rad/s: stalls / cv / iq sd / true speed | -2 rad/s: stalls / cv / iq sd | 5 rad/s: cv / iq sd / true speed |
+|---|---|---|---|
+| compensation 0 | 19.0 (19-19) / 86 % / 0.42 / 1.87 | 22.3 (21-25) / 89 % / 0.42 | 40 % / 0.14 / 5.00 |
+| compensation 0.38 V | **1.0 (0-3) / 46 % / 0.26** / 1.87 | **2.0 (2-2) / 47 % / 0.25** | 39 % / 0.16 / 4.99 |
+
+- Stalls -95 % forward, -91 % backward; hall interval cv halved; current ripple -38 / -40 %. Very consistent between
+  passes. At 5 rad/s neutral (iq sd +0.02).
+- Clearly stronger than the hall velocity decay alone on the same board (stalls -64 / -76 %, cv 93 -> 82 %): most of
+  the low speed jerkiness was the dead-time voltage error, not the velocity estimate.
+- The real speed stays ~7 % low at 2 rad/s with or without compensation: not caused by the dead time.
+- Not done yet: compensation + hall velocity decay together (test env only, the branches stay separate), source
+  from the measured currents (DM1), threshold sweep.

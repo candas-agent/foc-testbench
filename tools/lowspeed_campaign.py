@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Low speed campaign: THE MOTOR MOVES. Compares velocity estimates and a position ramp with one protocol.
+  --dt 0,0.38 (dt_f103 firmware): dead-time compensation A/B, C0 once per compensation value.
 
 Configurations (STM32F103 bench firmware with lib/testbench/src/hall_table.*):
   C0  SmoothingSensor (HallSensor velocity)                       ST0, velocity mode
@@ -55,11 +56,18 @@ def main():
     p.add_argument("--csv", default=None)
     p.add_argument("--passes", type=int, default=3)
     p.add_argument("--configs", default=None, help="comma separated name prefixes to run, e.g. C0,V1")
+    p.add_argument("--dt", default=None,
+                   help="dead-time A/B (dt_f103 firmware): comma separated compensations [V], e.g. 0,0.3; "
+                        "runs C0 once per value instead of the configurations")
+    p.add_argument("--dt-threshold", type=float, default=None, help="deadtime_comp_threshold [A] (DT command)")
     a = p.parse_args()
     elf = os.path.join(".pio", "build", a.env, "firmware.elf")
     global CONFIGS
     if a.configs:
         CONFIGS = [c for c in CONFIGS if any(c[0].startswith(x) for x in a.configs.split(","))]
+    if a.dt:
+        dt_th = [f"DT{a.dt_threshold}"] if a.dt_threshold else []
+        CONFIGS = [(f"C0 dt {v}", ["ST0", "DM0", f"D{v}"] + dt_th, False) for v in a.dt.split(",")]
     rows = []
     with BoardMemory(elf) as mem:
         port = RttPort(mem, timeout=0.1)
@@ -145,6 +153,8 @@ def main():
             cmd("ME0", 0.4)
             cmd("VO")
             cmd("ST0")
+            if a.dt:
+                cmd("D0")
             cmd("MAP20")
             print("X ->", cmd("X", 0.8).strip().replace("\n", " | "))
 
