@@ -1,6 +1,6 @@
 # Topics explored with this bench
 
-Overview of everything investigated so far (last update 2026-11-20): what kind of change it is, where it applies,
+Overview of everything investigated so far (last update 2026-11-20 evening): what kind of change it is, where it applies,
 whether it was measured, how much it would improve SimpleFOC, the risk and the effort, and where the code is.
 Measurements and details are in [test-log.md](test-log.md).
 
@@ -15,13 +15,15 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Priority | Topic | Status |
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
-| P1 | `dt` once per loopFOC (loopFOC -7.9 % on F103) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open |
+| P1 | `dt` once per loopFOC (loopFOC -6.1 % on F103, after the fix for a user-set `Ts` and the filter reset) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open, description updated |
+| P1 | `setPwm` one limit and one division, guard for invalid voltages (loopFOC -3.0 % on F103) | ready on candas-agent `perf/setpwm-single-limit` (d41eef5), PC equivalence tested: waiting for the user's branch on Candas1 |
 | P1 | Current sense pins compared as integers (loopFOC -2.7 % on F103) | [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
 | P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
 | P1 | Dead-time compensation | measured on 3 boards, [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) open (review, then upstream PR) |
 | P1 | STM32 Arduino core 3.0 compatibility | [simplefoc#588](https://github.com/simplefoc/Arduino-FOC/issues/588) (third party): test and support |
-| P2 | `dt` once per `loopFOC`, `setPwm` single division | measured in the GD32 optimisation, separate PRs to make |
+| P2 | Fewer soft float operations per loop (divisions, float compares ~20 % of the F103 CPU time) | PC profile done, not started |
+| P2 | PC unit tests (PlatformIO native) for edge cases of refactors | not started; cloud build workflow ready |
 | P2 | Circle limitation of the dq voltage and current | not started |
 | P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started |
 | P2 | SmoothingSensor float/double fix | [drivers PR](https://github.com/Candas1/Arduino-FOC-drivers/pull/3) draft |
@@ -45,7 +47,7 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 
 | Topic | Scope | Tested | Impact | Risk | Effort | Priority | Related issues | Branch / PR |
 |---|---|---|---|---|---|---|---|---|
-| `dt` computed once per `loopFOC` | All families | ✅ STM32F103: loopFOC -23.4 us (-7.9 %), +160 B flash; GD32F130 203 -> 189 us | M | L | L | **P1** | [#325](https://github.com/simplefoc/Arduino-FOC/issues/325) | [Candas1#21](https://github.com/Candas1/Arduino-FOC/pull/21) merged → [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open |
+| `dt` computed once per `loopFOC` | All families | ✅ STM32F103: loopFOC -18.1 us (-6.1 %), +248 B flash, +4 B RAM, with the fix (dt since the previous foc_current step, user `Ts` kept); re-enable test: filters reset after a pause as in dev; GD32F130 203 -> 189 us (first version) | M | L | L | **P1** | [#325](https://github.com/simplefoc/Arduino-FOC/issues/325) | [Candas1#21](https://github.com/Candas1/Arduino-FOC/pull/21) merged → [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open |
 | Current sense pins compared as integers (`pin != _NC` instead of `_isset(pin)`) | All families (generic current sense + STM32 ADC), gain on MCUs without FPU | ✅ STM32F103: loopFOC -7.9 us (-2.7 %), -120 B flash | L | L | L | **P1** | — (not reported before) | [Candas1#20](https://github.com/Candas1/Arduino-FOC/pull/20) merged → [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | The three together | | ✅ STM32F103: loopFOC 297.1 -> 255.4 us (-14 %), total loop -11.5 %, flash -32 B | | | | | | [candas-agent test/perf-acceptable](https://github.com/candas-agent/Arduino-FOC/tree/test/perf-acceptable) |
 | `setPwm`: one limit and one division (3PWM, 6PWM) | All families, gain on MCUs without FPU | ✅ STM32F103: loopFOC -9.0 us (-3.0 %) with the guard for invalid voltages (Vps <= 0: 0 % instead of 100 %), -56 B flash; PC equivalence test: at most one timer count | M | L | L | **P1** | [#356](https://github.com/simplefoc/Arduino-FOC/issues/356) (yours, 2023), [#529](https://github.com/simplefoc/Arduino-FOC/pull/529) (macros, open) | [candas-agent perf/setpwm-single-limit](https://github.com/candas-agent/Arduino-FOC/tree/perf/setpwm-single-limit) |
@@ -99,7 +101,11 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Topic | Scope | Tested | Impact | Risk | Effort | Priority | Related issues | Branch / PR |
 |---|---|---|---|---|---|---|---|---|
 | PlatformIO CI (library archiving check) | SimpleFOC repository | ✅ | M | L | L | P2 | [#593](https://github.com/simplefoc/Arduino-FOC/pull/593) | [candas-agent ci/platformio-libarchive](https://github.com/candas-agent/Arduino-FOC/tree/ci/platformio-libarchive) |
-| Unit tests on a PC (PlatformIO native, in the cloud) | Tooling | ❌ | M | L | M | P3 | — | none |
+| Unit tests on a PC (PlatformIO native, in the cloud) | Tooling | ❌ (needed: behaviour checks of refactors, see simplefoc#596) | M | L | M | P2 | — | none |
+| Cloud builds: GitHub Actions, PlatformIO envs in parallel, firmware artifacts | Bench | ✅ 3 envs in 1-2 min (local: 1 min with the cache, ~8 min for a new library commit); .bin identical to the local build except 3 newlib path strings | — | — | — | ✔ | — | `.github/workflows/build.yml`, tools `--elf` |
+| PC sampling profile while running (DWT_PCSR) | Bench | ✅ ~70 % of the F103 loop in libgcc soft float | — | — | — | ✔ | — | `tools/perf_run.py --pc N` |
+| Re-enable test: filtered iq frozen during a pause, first loops after enabling | Bench | ✅ shows the filter reset (or not) after a pause | — | — | — | ✔ | — | `tools/reenable_test.py`, recorder `iq` / `en` fields |
+| Equivalence test of a refactor on the PC (float32, C semantics, all special values) | Bench | ✅ setPwm: at most one timer count with valid voltages | — | — | — | ✔ | — | `tools/setpwm_equiv.py` |
 | 5065 motor bench with three sensors (on-board encoder, halls, shaft encoder) | Bench | ❌ | M (enables encoder tests) | L | H | P3 | — | idea |
 | Multi-board bench (ESC1, GD32F130, GD32F103, STM32F103) | Bench | ✅ | — | — | — | ✔ | — | this repository |
 | Low speed campaign options: dead-time A/B (`--dt V@threshold`), PI / friction sweeps (`--pi P/I/Tf/XF`), targets, PC polled hall edges (`--edges`) | Bench | ✅ | — | — | — | ✔ | — | `tools/lowspeed_campaign.py` |

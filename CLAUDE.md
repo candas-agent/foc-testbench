@@ -34,10 +34,22 @@ branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard spli
   as the supply is on; disconnect the ST-Link 3.3 V when the board is supplied.
 - `ALIGN_VOLTAGE` 0.8 V gives ~1.5 A (1.5 V would give ~3.7 A): never raise it without asking.
 - Without `SIMPLEFOC_STM32_ADC_INTERRUPT` (frozen currents with SimpleFOC dev on F1, see #594).
-- Commands that move the motor: ME1, SA, V<rad/s>, and the tools hall_calib.py, lowspeed_campaign.py.
+- Commands that move the motor: ME1, SA, V<rad/s>, and the tools hall_calib.py, lowspeed_campaign.py, perf_run.py,
+  reenable_test.py, trace_run.py.
+- With R_ds_on current sense the phase currents read while the motor is disabled are meaningless (tens of A):
+  only check them when enabled.
+- The STM32F103 runs at 64 MHz (no crystal, HSI), not 72.
 
 ## Workflow
-- Build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.
+- Build in the cloud (preferred, several envs in parallel, 1-2 min): push first, then
+  `gh workflow run build.yml --repo candas-agent/foc-testbench -f envs='["perf_dev_f103","<env>"]'`,
+  `gh run watch <id> --exit-status`, `gh run download <id> -D .pio/cloud/<id>`; flash with
+  `.venv/Scripts/pyocd.exe flash -t stm32f103rc .pio/cloud/<id>/<env>/firmware.elf` and give the tools `--elf`.
+  Only envs whose libraries are pushed (no `file://` or lib/qfplib). Same machine code as a local build.
+- Any change of platformio.ini wipes every local .pio/build: another reason to build in the cloud.
+- Before a PR that claims "same behaviour": written edge-case check (NaN, 0, negative, NOT_SET, rounding, first
+  call, after a pause, user-set parameters), PC test when possible (e.g. tools/setpwm_equiv.py).
+- Local build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.
 - Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
 - Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).
 - Hardware setup, safety and recorder code: lib/testbench (shared by src/main.cpp and the tests).
