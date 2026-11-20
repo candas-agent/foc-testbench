@@ -473,6 +473,27 @@ static void measureVbus() {
 #endif
 }
 
+// XO: re-centre the current sense offsets while the motor is enabled in open loop at 0 V (DB0, MC4, MT0, ME1):
+// the real current is 0 there, so the mean measured current is the offset error (drift since start-up).
+static void trimOffsets() {
+  if (!(motor.enabled && isOpenLoop() && motor.voltage_limit <= 0.0f)) {
+    bench_io.println(F("XO: enable the motor in open loop at 0 V first (DB0, MC4, MT0, ME1)"));
+    return;
+  }
+  const int n = 2000;
+  float sa = 0, sb = 0;
+  for (int k = 0; k < n; k++) {
+    PhaseCurrent_s c = currentSense.getPhaseCurrents();
+    sa += c.a; sb += c.b;
+    delayMicroseconds(100);
+  }
+  sa /= n; sb /= n;
+  currentSense.offset_ia += sa / currentSense.gain_a;
+  currentSense.offset_ib += sb / currentSense.gain_b;
+  bench_io.print(F("offset error removed [A]: a ")); bench_io.print(sa, 4);
+  bench_io.print(F(" b ")); bench_io.println(sb, 4);
+}
+
 static void doSafety(char* cmd) {
   switch (cmd[0]) {
     case 'T': if (hasArg(cmd + 1)) run_timeout_s = (uint32_t)atol(cmd + 1); break;
@@ -480,6 +501,7 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+    case 'O': trimOffsets(); return;  // XO: re-centre the current offsets (open loop, 0 V, enabled)
 #ifdef BENCH_PROFILE
     case 'P': prof_print(bench_io); return;   // XP: loop profile
 #ifdef BENCH_MICROBENCH

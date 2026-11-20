@@ -822,3 +822,38 @@ it. Comp 0.38 V, PI 0.2 / 0.3 / 0.01, +-1 rad/s 22 s x 4 passes = 12 turns per d
 - Offsets could not be checked at rest: with the driver disabled the R_ds_on sense reads ~-11 A (MOSFETs off).
 - Next: same mapping in voltage torque mode (no current sense in the loop) and/or with the motor enabled at zero
   current to read the offsets; if the dip moves or disappears, it is the current sense.
+
+### Current offsets: measured at 0 V, re-centred (XO), stalls mapped again (combo_f103)
+
+New: `XO` bench command (re-centres the offsets from the mean measured current, only when enabled in open loop at
+0 V), `tools/offset_trim.py` (DB0 MC4 MT0 ME1, measure, XO, measure). The bench forces foc_current in closed loop:
+"MT0" there gave zero *measured* current with uq 0.32 / ud -0.14 V applied, not a 0 V test.
+
+Offset error at 0 V (real current 0): warm, after ~1 h of tests: ia -0.047, ib -0.047, ic +0.094 A; just after a
+reflash (boot calibration): -0.021 / -0.025 A; after XO: -0.008 / -0.007 A. Some drift with temperature.
+
+Same mapping as before after XO (comp 0.38 V, PI 0.2 / 0.3 / 0.01, +-1 rad/s 22 s x 4, no fault,
+data/2026-11-20/stall_map_trim_edges.csv):
+
+| hall state | 1 | 5 | 4 | 6 | 2 | 3 | stalls |
+|---|---|---|---|---|---|---|---|
+| forward before XO | 0.64 | 1.21 | **2.27** | 0.85 | 0.68 | 0.63 | 56 |
+| forward after XO | 0.65 | 0.65 | 0.84 | 1.02 | **1.66** | **1.42** | 21 |
+| backward before XO | 0.88 | 0.82 | 0.78 | 0.68 | **1.37** | **1.75** | 48 |
+| backward after XO | 0.78 | **2.61** | 1.16 | 0.60 | 0.54 | 0.71 | 71 |
+
+(mean sector time / nominal)
+
+- **A 0.02-0.04 A change of the offsets moves the slow sector by ~2 sectors (~120° electrical)** in both
+  directions, and the slow sectors stay roughly opposite between forward and backward: a 1x electrical torque
+  disturbance tied to the current measurement. Still repeatable per position (+0.87 / +0.89), mechanical position
+  still minor (per electrical period 0.92-1.39).
+- Nulling the offsets at 0 V does not remove it: the offset that matters is the one *while running* (R_ds_on
+  sensing: switching, MOSFET temperature, sampling instant), not the one at 0 V. At 1 rad/s iq is only a few
+  tenths of an ampere, so a few tens of mA of error already decide where the wheel stalls.
+- Ideas: estimate the running offset from the 1x electrical ripple of the current PI output (ud/uq) at constant
+  speed, or tune the offsets on the bench to minimise the stalls; an independent current reference (scope + current
+  probe) would settle it.
+- DC link current (right motor shunt on PC1, EFeru defines.h, not read by the bench yet): at low speed its mean is
+  only power / Vbus (~10-70 mA), and with the SimpleFOC sampling at the PWM centre (zero vector) it is 0 at the
+  sampling instant, so it cannot be compared to a phase current without a dedicated sampling instant.
