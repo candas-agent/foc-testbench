@@ -83,8 +83,10 @@ def main():
         base_name, base_setup = (CONFIGS[0][0], CONFIGS[0][1]) if a.dt else ("C0", ["ST0"])
         CONFIGS = []
         for e in a.pi.split(","):
-            kp, ki, tf = e.split("/")
-            CONFIGS.append((f"{base_name} PI {kp}/{ki}/{tf}", base_setup + [f"MVP{kp}", f"MVI{ki}", f"MVF{tf}"], False))
+            kp, ki, tf, *xf = e.split("/")          # optional 4th field: friction feed-forward [A] (XF)
+            xf = xf[0] if xf else "0"
+            CONFIGS.append((f"{base_name} PI {kp}/{ki}/{tf} XF {xf}",
+                            base_setup + [f"MVP{kp}", f"MVI{ki}", f"MVF{tf}", f"XF{xf}"], False))
     rows = []
     with BoardMemory(elf) as mem:
         port = RttPort(mem, timeout=0.1)
@@ -173,7 +175,7 @@ def main():
             if a.dt:
                 cmd("D0")
             if a.pi:
-                for c in ["MVP0.4", "MVI1", "MVF0.01"]:
+                for c in ["MVP0.4", "MVI1", "MVF0.01", "XF0"]:
                     cmd(c)
             cmd("MAP20")
             print("X ->", cmd("X", 0.8).strip().replace("\n", " | "))

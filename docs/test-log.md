@@ -777,3 +777,20 @@ Softer at +-1 rad/s (data/2026-11-20/combo_f103_pi_soft.csv, 3 passes):
   a real gain forward, small backward. The real speed gain is robust (0.95-0.97 vs 0.85).
 - Softer than P 0.2 I 0.3 brings nothing; I 0.1 brings the speed error back (0.88-0.92).
 - **Keep P 0.2, I 0.3, Tf 0.01** for this board: better from 1 to 5 rad/s, no need for speed-dependent gains.
+
+### Friction feed-forward at +-1 rad/s with the soft PI (combo_f103, comp 0.38 V, PI 0.2 / 0.3 / 0.01)
+
+`--pi 0.2/0.3/0.01/<XF>` (4th field = XF friction feed-forward [A]), 3 passes, no fault
+(data/2026-11-20/combo_f103_friction.csv):
+
+| XF [A] | +1: stalls / cv / true | -1: stalls / cv / true |
+|---|---|---|
+| 0 | 6.0 (4-9) / 65 % / 0.95 | 7.3 (3-10) / 69 % / 0.95 |
+| 0.1 | 4.3 (3-7) / 59 % / 0.95 | 7.3 (5-9) / 73 % / 0.94 |
+| 0.2 | 4.0 (2-5) / 58 % / 0.95 | 6.7 (4-9) / 72 % / 0.94 |
+| 0.3 | 6.0 (4-8) / 65 % / 0.94 | 9.0 (5-12) / 79 % / 0.93 |
+
+- Still no clear effect, now with a slower integrator either: 0.1-0.2 A slightly fewer stalls forward, within the
+  run-to-run spread; 0.3 A slightly worse. Same conclusion as this morning: a constant friction torque is not what
+  makes the wheel stall. Probably position dependent (cogging, a tight spot): to check by mapping the stalls on
+  the hall-counted angle.
