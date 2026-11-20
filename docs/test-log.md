@@ -690,3 +690,26 @@ compensation 1 / 46 % / 0.26 / 1.87; **both 0 / 24 % / 0.17 / 1.98**.
 - **The real speed error is gone** (1.98 instead of ~1.85 at +-2 rad/s): the ~7-8 % deficit only disappears with
   both changes; each one alone leaves it. 5 rad/s unchanged.
 - The "decay only" row is noisier than in the earlier A/B (stalls 7-23 vs 6-14).
+
+### Slower: +-1 and +-0.5 rad/s, decay only vs decay + compensation (combo_f103)
+
+Same firmware and PI, `--targets 1:15,-1:15,0.5:20,-0.5:20`, 3 passes (data/2026-11-20/combo_f103_slow.csv).
+Nominal sector time 70 ms at 1 rad/s, 140 ms at 0.5 rad/s (stall = interval > 3x nominal: 209 / 419 ms).
+
+| | +1: stalls / cv / iq sd / true speed | -1: stalls / cv / true speed | +0.5: back / cv / true speed | -0.5: back / cv / true speed |
+|---|---|---|---|---|
+| decay only | 11.7 (10-13) / 89 % / 0.26 / 0.87 | 11.7 (9-15) / 87 % / 0.86 | 10 / 84 % / 0.49 | 10 / 86 % / 0.48 |
+| decay + comp 0.38 V | 11.7 (10-13) / 85 % / 0.27 / 0.86 | 8.3 (4-12) / 79 % / 0.85 | 11 / 82 % / 0.49 | 13 / 84 % / 0.48 |
+
+- **Below 2 rad/s the compensation no longer helps**: at 1 rad/s ~12 stalls per 13 s in both cases, hall interval
+  cv ~85 %, real speed -14 %. At 2 rad/s the same firmware had 0 stalls and cv 24 %.
+- The estimated velocity has the right mean (1.00) but sd ~0.68 rad/s: the velocity loop limit-cycles on the
+  sector-quantised estimate. Likely cause of the real speed deficit: with irregular sectors, the value of a short
+  sector is held during the following long one, so the time-averaged estimate overestimates the speed and the PI
+  settles below the target (consistent with the deficit vanishing when the cv fell to 24 % at 2 rad/s).
+- At 0.5 rad/s the mean speed is right (0.49) but the motion is irregular too (cv ~84 %) with ~10 back-and-forth
+  hall edges per run (rotor rocking on an edge). The stall metric is meaningless there (419 ms > the 200 ms
+  velocity timeout).
+- Ideas, not tried: lower compensation threshold (iq is small at these speeds, the ramp may only apply part of the
+  compensation), lower velocity PI gains or a longer velocity filter below 2 rad/s, velocity estimate from the
+  SmoothingSensor angle over a fixed window.

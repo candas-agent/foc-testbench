@@ -60,9 +60,13 @@ def main():
                    help="dead-time A/B (dt_f103 firmware): comma separated compensations [V], e.g. 0,0.3; "
                         "runs C0 once per value instead of the configurations")
     p.add_argument("--dt-threshold", type=float, default=None, help="deadtime_comp_threshold [A] (DT command)")
+    p.add_argument("--targets", default=None,
+                   help="velocity:seconds list replacing the default targets, e.g. 1:15,-1:15,0.5:20")
     a = p.parse_args()
     elf = os.path.join(".pio", "build", a.env, "firmware.elf")
-    global CONFIGS
+    global CONFIGS, TARGETS
+    if a.targets:
+        TARGETS = [(float(t.split(":")[0]), float(t.split(":")[1])) for t in a.targets.split(",")]
     if a.configs:
         CONFIGS = [c for c in CONFIGS if any(c[0].startswith(x) for x in a.configs.split(","))]
     if a.dt:
