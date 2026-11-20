@@ -938,7 +938,7 @@ the pattern is locked to the electrical position and very repeatable. The hall s
 54-67 deg el) explain at most +-12 % and do not match it (the 67 deg sector is one of the fastest): the remaining
 +-40 % is a real 1x electrical speed ripple, the same signature as the current sense offset ripple seen earlier.
 
-## 2026-11-20 - loop cost of the two PRs (STM32F103, 72 MHz, no FPU)
+## 2026-11-20 - loop cost of the two PRs (STM32F103, 64 MHz, no FPU)
 
 tools/perf_run.py: 2 rad/s velocity mode, foc_current, 10 XP reads of 256 loops each, same bench code and flags
 for all firmwares (perf_dev_f103 = dev ae7b3ad, perf_hall_f103 = dev + b691018, dt_f103 = dev + d0f4aa3,
@@ -953,7 +953,7 @@ combo_f103 = both). Data data/2026-11-20/perf.csv. Mean loopFOC / move [us]:
 | both, D 0 (x2) | 300.1 / 301.3 | 85.2 / 85.2 |
 | both, D 0.38 (x2) | 330.8 / 331.5 | 84.9 / 85.1 |
 
-- Compensation active: **+31 us in loopFOC** (+10 %, ~2200 cycles: soft float on the M3), repeatable to 1 us.
+- Compensation active: **+31 us in loopFOC** (+10 %, ~2000 cycles at 64 MHz: soft float on the M3), repeatable to 1 us.
   Code present but D 0: +3 us. On a whole bench loop of ~431 us that is +7 % (2.3 -> 2.15 kHz).
 - Hall velocity decay: not measurable (move varies 80-85 us between runs of the same firmware; getVelocity +8 B).
 - The bench "debug" part also grows +39 us with compensation on: bench code recomputing the compensation for dbg,
@@ -963,3 +963,30 @@ combo_f103 = both). Data data/2026-11-20/perf.csv. Mean loopFOC / move [us]:
 Same settings as the polled traces; docs/figures/f103_trace_2rads_edgelog.png, data tracelog_{dev,dt,hallvel,both}*.csv.
 The curves are now clean: dev and hall velocity alone show a 1x electrical cycle (one ~0.6 rad/s sector, then a
 ~4 rad/s catch-up), the compensation halves it, both keep 1.5-2.7 rad/s. iq sd 0.43 / 0.26 / 0.31 / 0.16 A.
+
+## 2026-11-20 - STM32F103 loop: clock, -O2, double precision
+
+**Clock** (RCC read by pyOCD, motor off): HSE off, PLL = HSI/2 x 16 = **64 MHz** (not 72), APB1 /2, flash 2 wait
+states, prefetch on (FLASH_ACR 0x32). The board has no crystal: the core variant (generic_clock.c, F103R(C-D-E)T)
+starts the HSI. 64 MHz is the maximum from the HSI on an F103, nothing to gain there. The profiler converts with
+SystemCoreClock, so all the us figures were right; only the "72 MHz" label was wrong (fixed above).
+
+**-O2** (tools/perf_run.py, 2 rad/s, 10 XP reads, same firmware as perf_dev_f103 otherwise; data/2026-11-20/perf_o2.csv):
+
+| firmware | loopFOC [us] | move [us] | total [us] | flash [B] |
+|---|---|---|---|---|
+| perf_dev_f103 (-Os) | 297.1 | 80.8 | 430.9 | 89604 |
+| perf_o2hot_f103 (loop files -O2, scripts/o2_hot.py) | 294.2 | 80.2 | 427.6 | 93748 |
+| perf_o2_f103 (whole firmware -O2) | 294.2 | 78.0 | 425.8 | 101844 |
+
+Only -1 % for +4 / +12 KB: the loop time is not in the compiled SimpleFOC code but in the libgcc soft float
+routines (already optimised, not affected by -O2) and the flash wait states. Not worth it.
+
+**Double precision** (env dblaudit_f103 with -Wdouble-promotion, then the callers of __aeabi_d* / f2d in the ELF):
+in the loop only SmoothingSensor::update() (fixed by Candas1/Arduino-FOC-drivers#3). SimpleFOC dev itself is clean
+except Encoder.cpp:93 (intentional, once per index). The rest is command parsing (strtod, Commander) and
+Sensor::getPreciseAngle(), not called in the loop. Nothing to fix in the library.
+
+Remaining levers on the F103: fewer float divisions per loop (LowPassFilter alpha = Tf/(Tf+dt) on every call, PID
+derivative / dt, HallSensor velocity, setPwm / voltage_power_supply x3), libgcc float routines and hot code in RAM
+(no wait states), fixed point (not upstreamable).

@@ -48,8 +48,12 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | SmoothingSensor: one `1/pole_pairs` division, `0.001f` instead of double | Drivers, MCUs without FPU | ✅ -6 % per `update()`, ~1.7 µs per loop | L | L | L | P2 | — | [Candas1/Arduino-FOC-drivers#3](https://github.com/Candas1/Arduino-FOC-drivers/pull/3) draft |
 | GD32F130 loop: zero wait state flash linker script, fast math, no FreeRTOS, monotonic `micros()` | GD32 (dev-gd32 driver) | ✅ 1567 → 168 µs | H (GD32 users) | M | M | P2 | — | bench, sketch `perf/gd32-fast-loop` (local) |
 | Shared index / cache for `_sincos`, faster `_normalizeAngle` | All families | ✅ part of the GD32 loop optimisation | M | M | M | P3 | [#530](https://github.com/simplefoc/Arduino-FOC/pull/530), [#572](https://github.com/simplefoc/Arduino-FOC/issues/572) | bench (`fastmath.cpp`) |
-| Dead-time compensation cost on MCUs without FPU | `BLDCMotor::setPhaseVoltage` | ✅ measured: +31 µs per `loopFOC` on the STM32F103 (~2200 cycles of soft float); not measured on an FPU MCU | L | L | M | P3 | — | [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) (measure first, then optimise if worth it) |
-| Loop code in RAM / 72 MHz on STM32F103 | STM32F103 | ❌ (STM32F103 47 % slower than GD32F103, same code) | M | M | M | P3 | — | none |
+| Dead-time compensation cost on MCUs without FPU | `BLDCMotor::setPhaseVoltage` | ✅ measured: +31 µs per `loopFOC` on the STM32F103 (~2000 cycles of soft float at 64 MHz); not measured on an FPU MCU | L | L | M | P3 | — | [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) (measure first, then optimise if worth it) |
+| Loop code and libgcc soft float routines in RAM on STM32F103 | STM32F103 | ❌ (STM32F103 47 % slower than GD32F103, same code: 2 flash wait states at 64 MHz vs zero wait state flash) | M | M | M | P3 | — | none |
+| Fewer float divisions per loop (LowPassFilter alpha, PID `/dt`, hall velocity, `setPwm`) | All families, mostly MCUs without FPU | ❌ (inventory done 20/11) | L | L | M | P3 | — | none |
+| STM32F103 clock | STM32F103 without crystal (hoverboard) | ✅ 64 MHz from the HSI (maximum without a crystal), not 72 | — | — | — | ✔ nothing to gain | — | test log |
+| -O2 instead of -Os on STM32F103 | Projects | ✅ loopFOC -1 % for +4 KB (loop files) / +12 KB (all) | L | L | L | P4 | — | envs `perf_o2hot_f103`, `perf_o2_f103` |
+| Double precision promotions | SimpleFOC dev | ✅ `-Wdouble-promotion` + ELF callers: only SmoothingSensor in the loop (drivers PR), library clean | — | — | — | ✔ nothing to fix | — | env `dblaudit_f103` |
 | qfplib soft float | Cortex-M0/M3 without FPU | ✅ ~5 % faster | M | H (GPL licence) | L | P4 | — | bench, local |
 | Firmware size (small atof, no `lib_archive`) | Projects | ✅ 45.8 → 34.8 KB on the sketch | L | L | L | P4 | — | sketch, local |
 
