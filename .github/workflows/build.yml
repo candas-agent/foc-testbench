@@ -1,0 +1,41 @@
+# Builds the requested PlatformIO environments in parallel and keeps their firmware as artifacts.
+#   gh workflow run build.yml -f envs='["perf_dev_f103","perf_dtfix_f103"]'
+#   gh run download <run id> -D .pio/cloud
+name: build
+on:
+  workflow_dispatch:
+    inputs:
+      envs:
+        description: 'JSON list of PlatformIO environments, e.g. ["perf_dev_f103"]'
+        required: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJSON(inputs.envs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PlatformIO cache (platform, toolchain, libraries)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/packages
+            ~/.platformio/platforms
+            ~/.platformio/.cache
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+      - run: pip install platformio
+      - run: pio run -e ${{ matrix.env }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.env }}
+          path: |
+            .pio/build/${{ matrix.env }}/firmware.elf
+            .pio/build/${{ matrix.env }}/firmware.bin
+            .pio/build/${{ matrix.env }}/firmware.map
+          if-no-files-found: error

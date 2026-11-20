@@ -10,12 +10,12 @@ import time
 
 from elftools.elf.elffile import ELFFile  # installed with pyocd
 
-DBG_MAGIC = 0xF0CDB005
+DBG_MAGIC = 0xF0CDB006
 DBG_FIELDS = ["magic", "ia", "ib", "ic", "comp_a", "comp_b", "comp_c", "iq", "id", "uq", "ud",
               "electrical_angle", "velocity", "loop_us", "obs_angle", "angle_err", "fault", "enabled", "vbus", "hall", "sensor_angle", "hall_count"]
 DBG_FORMAT = "<I15fIIfIfi"
-SAMPLE_FIELDS = ["t_us", "ia", "comp_a", "angle_err"]
-SAMPLE_FORMAT = "<I3f"
+SAMPLE_FIELDS = ["t_us", "ia", "comp_a", "angle_err", "iq", "en"]
+SAMPLE_FORMAT = "<I5f"
 
 
 def elf_symbols(elf_path, names, optional=()):

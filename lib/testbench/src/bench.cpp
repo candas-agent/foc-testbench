@@ -195,6 +195,8 @@ static void rec_update() {
   rec_buf[rec_n].ia = dbg.ia;
   rec_buf[rec_n].comp_a = dbg.comp_a;
   rec_buf[rec_n].angle_err = dbg.angle_err;
+  rec_buf[rec_n].iq = motor.current.q;
+  rec_buf[rec_n].en = motor.enabled ? 1.0f : 0.0f;
   if (++rec_n >= RECORD_SAMPLES) {
     rec_running = 0;
     if (rec_auto_dump) {

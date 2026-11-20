@@ -39,7 +39,7 @@ extern MXLEMMINGObserverSensor observer;
 
 // Variables read with pyOCD (global, volatile so they are never optimised away)
 // The layout is mirrored in tools/board_mem.py: update both together (DBG_MAGIC checks the version).
-#define DBG_MAGIC 0xF0CDB005u
+#define DBG_MAGIC 0xF0CDB006u
 struct DebugVars {
   uint32_t magic;                // DBG_MAGIC
   float ia, ib, ic;              // measured phase currents [A]
@@ -91,6 +91,8 @@ struct Sample {
   float ia;          // measured phase A current [A]
   float comp_a;      // compensation added on phase A [V]
   float angle_err;   // observer angle error [rad]
+  float iq;          // filtered q current motor.current.q [A]
+  float en;          // motor enabled (1) or not (0)
 };
 // recorder state, C linkage so tools/board_mem.py finds the symbols in the ELF
 extern "C" {
