@@ -15,6 +15,7 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Priority | Topic | Status |
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
+| P1 | `dt` once per loopFOC (loopFOC -7.9 % on F103) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open |
 | P1 | Current sense pins compared as integers (loopFOC -2.7 % on F103) | [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
 | P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
@@ -44,7 +45,7 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 
 | Topic | Scope | Tested | Impact | Risk | Effort | Priority | Related issues | Branch / PR |
 |---|---|---|---|---|---|---|---|---|
-| `dt` computed once per `loopFOC` | All families | ✅ STM32F103: loopFOC -23.4 us (-7.9 %), +160 B flash; GD32F130 203 -> 189 us | M | L | L | **P1** | [#325](https://github.com/simplefoc/Arduino-FOC/issues/325) | [candas-agent perf/loopfoc-dt-once](https://github.com/candas-agent/Arduino-FOC/tree/perf/loopfoc-dt-once) |
+| `dt` computed once per `loopFOC` | All families | ✅ STM32F103: loopFOC -23.4 us (-7.9 %), +160 B flash; GD32F130 203 -> 189 us | M | L | L | **P1** | [#325](https://github.com/simplefoc/Arduino-FOC/issues/325) | [Candas1#21](https://github.com/Candas1/Arduino-FOC/pull/21) merged → [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open |
 | Current sense pins compared as integers (`pin != _NC` instead of `_isset(pin)`) | All families (generic current sense + STM32 ADC), gain on MCUs without FPU | ✅ STM32F103: loopFOC -7.9 us (-2.7 %), -120 B flash | L | L | L | **P1** | — (not reported before) | [Candas1#20](https://github.com/Candas1/Arduino-FOC/pull/20) merged → [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | The three together | | ✅ STM32F103: loopFOC 297.1 -> 255.4 us (-14 %), total loop -11.5 %, flash -32 B | | | | | | [candas-agent test/perf-acceptable](https://github.com/candas-agent/Arduino-FOC/tree/test/perf-acceptable) |
 | `setPwm`: one limit and one division (3PWM, 6PWM) | All families, gain on MCUs without FPU | ✅ STM32F103: loopFOC -10.8 us (-3.6 %), -80 B flash | M | L | L | **P1** | [#356](https://github.com/simplefoc/Arduino-FOC/issues/356) (yours, 2023), [#529](https://github.com/simplefoc/Arduino-FOC/pull/529) (macros, open) | [candas-agent perf/setpwm-single-limit](https://github.com/candas-agent/Arduino-FOC/tree/perf/setpwm-single-limit) |
