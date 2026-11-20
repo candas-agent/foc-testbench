@@ -60,6 +60,8 @@ def main():
                    help="dead-time A/B (dt_f103 firmware): comma separated compensations [V], e.g. 0,0.3; "
                         "runs C0 once per value instead of the configurations")
     p.add_argument("--dt-threshold", type=float, default=None, help="deadtime_comp_threshold [A] (DT command)")
+    p.add_argument("--pi", default=None,
+                   help="velocity PI sweep, comma separated P/I/Tf entries, e.g. 0.4/1/0.01,0.2/0.3/0.01")
     p.add_argument("--targets", default=None,
                    help="velocity:seconds list replacing the default targets, e.g. 1:15,-1:15,0.5:20")
     a = p.parse_args()
@@ -76,6 +78,13 @@ def main():
             v, _, th = e.partition("@")
             th = th or str(a.dt_threshold if a.dt_threshold else 0.2)
             CONFIGS.append((f"C0 dt {v} th {th}", ["ST0", "DM0", f"D{v}", f"DT{th}"], False))
+    if a.pi:
+        # velocity PI sweep "P/I/Tf,P/I/Tf": each entry on top of the first --dt entry (or no compensation change)
+        base_name, base_setup = (CONFIGS[0][0], CONFIGS[0][1]) if a.dt else ("C0", ["ST0"])
+        CONFIGS = []
+        for e in a.pi.split(","):
+            kp, ki, tf = e.split("/")
+            CONFIGS.append((f"{base_name} PI {kp}/{ki}/{tf}", base_setup + [f"MVP{kp}", f"MVI{ki}", f"MVF{tf}"], False))
     rows = []
     with BoardMemory(elf) as mem:
         port = RttPort(mem, timeout=0.1)
@@ -163,6 +172,9 @@ def main():
             cmd("ST0")
             if a.dt:
                 cmd("D0")
+            if a.pi:
+                for c in ["MVP0.4", "MVI1", "MVF0.01"]:
+                    cmd(c)
             cmd("MAP20")
             print("X ->", cmd("X", 0.8).strip().replace("\n", " | "))
 

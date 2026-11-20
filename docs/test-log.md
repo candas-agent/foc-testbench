@@ -734,3 +734,22 @@ read stall; the safety did its job. So 1 pass for 0 and 0.02 A, 2 passes for the
   forward not at all.
 - Next suspects: the velocity loop on a sector-quantised estimate (sd ~0.6-0.7 rad/s at 1 rad/s) -> softer PI or a
   longer velocity filter below 2 rad/s, or a velocity estimate over a fixed window from the SmoothingSensor angle.
+
+### Velocity PI sweep at +-1 rad/s (combo_f103, compensation 0.38 V threshold 0.2 A)
+
+`--dt 0.38@0.2 --pi 0.4/1/0.01,0.2/1/0.01,0.2/0.3/0.01,0.4/1/0.03 --targets 1:15,-1:15`, 3 passes, no fault
+(data/2026-11-20/combo_f103_pi_sweep.csv). PI = P / I / velocity filter Tf [s].
+
+| PI | +1: stalls / cv / iq sd / true speed | -1: stalls / cv / iq sd / true speed |
+|---|---|---|
+| 0.4 / 1 / 0.01 (reference) | 11.0 (10-12) / 84 % / 0.27 / 0.85 | 7.7 (6-9) / 76 % / 0.24 / 0.86 |
+| 0.2 / 1 / 0.01 | 12.0 (10-14) / 86 % / 0.19 / 0.93 | 10.7 (5-19) / 81 % / 0.19 / 0.94 |
+| **0.2 / 0.3 / 0.01** | **1.7 (1-2) / 46 % / 0.16 / 0.96** | **4.7 (3-7) / 57 % / 0.17 / 0.95** |
+| 0.4 / 1 / 0.03 | 12.3 (9-14) / 92 % / 0.25 / 0.90 | 13.0 (9-15) / 91 % / 0.25 / 0.90 |
+
+- **The velocity PI was the limit at 1 rad/s**: P 0.2 I 0.3 cuts the stalls by 85 % forward / 40 % backward, halves
+  the cv, current ripple -40 %, real speed error -14 % -> -4 %. Lower P alone already fixes most of the speed error
+  (0.93) but not the stalls; the lower I is what removes them (less integrator wind-up between sector updates).
+- A longer velocity filter (30 ms) is worse, as at 2 rad/s.
+- To do: even softer (P 0.1-0.2, I 0.1-0.3), and check these gains at 2 and 5 rad/s (they may be too soft there:
+  gain scheduling by speed if so).
