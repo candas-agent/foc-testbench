@@ -669,3 +669,24 @@ DM0, threshold 0.2 A), `lowspeed_campaign.py --dt 0,0.38`, 3 passes with alterna
 - The real speed stays ~7 % low at 2 rad/s with or without compensation: not caused by the dead time.
 - Not done yet: compensation + hall velocity decay together (test env only, the branches stay separate), source
   from the measured currents (DM1), threshold sweep.
+
+### Combined: dead-time compensation + hall velocity decay (test only, branches stay separate)
+
+Firmware `combo_f103`: local branch test/combo-dt-hallvel = feat/deadtime-compensation-dev (d0f4aa3) +
+fix/hall-velocity-decay (b691018, cherry-picked cleanly as 7074ac1), not pushed. Same protocol, compensation 0 vs
+0.38 V at run time, 3 passes (data/2026-11-20/combo_f103_ab.csv):
+
+| | 2 rad/s: stalls / cv / iq sd / true speed | -2 rad/s: stalls / cv / iq sd / true speed | 5 rad/s: cv / iq sd |
+|---|---|---|---|
+| decay only (comp 0) | 13.7 (7-23) / 77 % / 0.32 / 1.84 | 3.0 (1-6) / 58 % / 0.26 / 1.89 | 39 % / 0.14 |
+| decay + comp 0.38 V | **0 (0-0) / 24 % / 0.17 / 1.98** | **0 (0-0) / 24 % / 0.17 / 1.98** | 39 % / 0.16 |
+
+Overview at 2 rad/s forward (stalls / cv / iq sd / true speed), all on this board and protocol:
+dev 19-28 / 86-93 % / 0.42 / 1.82-1.87; decay 10-14 / 77-82 % / 0.29-0.32 / 1.83-1.84;
+compensation 1 / 46 % / 0.26 / 1.87; **both 0 / 24 % / 0.17 / 1.98**.
+
+- The two changes are complementary: no stall at all in 6 runs, hall interval cv divided by 3.5 vs dev, current
+  ripple -60 %, identical in both directions and between passes.
+- **The real speed error is gone** (1.98 instead of ~1.85 at +-2 rad/s): the ~7-8 % deficit only disappears with
+  both changes; each one alone leaves it. 5 rad/s unchanged.
+- The "decay only" row is noisier than in the earlier A/B (stalls 7-23 vs 6-14).
