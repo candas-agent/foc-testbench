@@ -24,9 +24,9 @@ def pid(skip, P, I, D, e, ep, ip, op, limit, ramp, dt):
         has_lim = limit != NOT_SET
         integ = np.where(has_lim, constrain(integ, -limit, limit), integ).astype(f32)
         der = (((D * (e - ep).astype(f32)).astype(f32)) / dt).astype(f32)
-        if skip:
-            der = np.where(D != 0, der, f32(0)).astype(f32)
         out = ((prop + integ).astype(f32) + der).astype(f32)
+        if skip:  # output = P + I; if (D != 0) output += derivative
+            out = np.where(D != 0, out, (prop + integ).astype(f32)).astype(f32)
         out = np.where(has_lim, constrain(out, -limit, limit), out).astype(f32)
         use_ramp = (ramp != NOT_SET) & (ramp > 0)
         rate = ((out - op).astype(f32) / dt).astype(f32)
