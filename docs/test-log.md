@@ -31,6 +31,8 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   noise +-0.8 A; loop ~0.8-1.2 ms (no FPU), observer off, current controller at 100 Hz; hall alignment
   2.09 rad / CCW from the split board sketch.
 - **Not done yet**: closed loop velocity tests with and without compensation, repeating the GD32 comparisons.
+- **GD32 loop time** (2026-11-18, zero torque, motor enabled): 1567 -> 219 us (observer off), 1995 -> 286 us (on):
+  code and virtual tables in the first 32 KB of flash (the only zero wait state area), see the last entry.
 
 ## Setup
 
@@ -186,3 +188,458 @@ One entry per test session. Keep the CSV exports in `data/<date>/` (ignored by g
   - User feel (repeated test): less resistance when turning the wheel with the compensation on measured
     currents (DM1, threshold 1.22 A); no difference expected nor felt with DM0 (0 at zero torque by design).
     Consistent with the lower iq fluctuations in both runs. No vibration caused by DM1 with this threshold.
+
+## 2026-11-18: GD32F130 loop optimisation (env gd32f130, slave board, zero torque)
+
+Loop time with the motor enabled, closed loop torque MC0/MT2, target 0 A, compensation off, wheel at rest
+(`loop_us` = SimpleFOC loopfoc_time_us, same script for the three firmwares; the profiler (XP) agrees within 2 %):
+
+| Firmware | Observer off | Observer on |
+|---|---|---|
+| Before (e26cee3) | 1567 us | 1995 us |
+| Optimised (env gd32f130) | **219 us** | **286 us** |
+| Optimised + Qfplib-M3 (env gd32f130_qfp, not in the repository) | 202 us | 264 us |
+
+What made the difference, in order of effect:
+- **Only the first 32 KB of flash run without wait states** (datasheet: "a long time delay when CPU fetches the
+  instructions out of the range"). Measured: the same loop takes 931 cycles at 0x080077A1 and 5106 cycles at
+  0x08008DA1 (5.5x). The firmware is ~60 KB and the linker had put libm, micros, the bench and the RTT code above.
+  `ld/gd32f130_fastloop.ld` places the loop code first; the link fails if it exceeds 32 KB (`__fast_end`).
+- **Constant data read from the slow flash is slow too**: the C++ virtual tables (one read per virtual call:
+  sensor, current sense, driver, stream) moved to the fast area: 321 -> 220 us.
+- `_sincos` / `_normalizeAngle` (weak SimpleFOC functions) replaced by `fastmath.cpp`: same table and results,
+  one float multiply for sin and cos, no `fmodf`.
+- FreeRTOS was linked (lib_archive = false) and hooked the SysTick interrupt: `lib_ignore = FreeRTOS for GD32`
+  (also removes the jitter: max = mean now, 250 bytes of RAM saved).
+- Qfplib-M3 (add/sub/mul/div/sqrt only, through `-Wl,--wrap`): -8 % only, the comparisons, conversions and calls
+  of libgcc still dominate. GPL v2: kept out of the repository (`lib/qfplib` ignored), env `gd32f130_qfp` documents it.
+
+**micros() goes backwards on the GD32 core**: up to 930 us, 7 times in 10 s (counted with XP). The core reads the
+tick counter and SysTick->VAL without checking a pending SysTick wrap. SimpleFOC uses unsigned differences of
+`_micros()`, so the SmoothingSensor then jumps the hall angle by pi/3 electrical for one loop (also in the old
+firmware, less often). `gd32_micros.c` (`-Wl,--wrap=getCurrentMicros`) fixes it: 0 backward steps since.
+Worth reporting to CommunityGD32Cores (systick.c getCurrentMicros).
+
+Notes:
+- The GD32F130 is rated 48 MHz max (datasheet), the Arduino core sets 72 MHz (board F_CPU says 48 MHz). All the
+  numbers above are at 72 MHz.
+- Flash 91 % (gd32f130), 95 % (gd32f130_qfp). XB micro benchmarks only with `-D BENCH_MICROBENCH` (~3 KB).
+- SmoothingSensor compares the velocity with double literals (`0.001`): patched locally only, to fix in the
+  drivers fork (no measurable effect at rest).
+- Tools: `XP` (loop profile, DWT cycle counter), `tools/pc_sample.py` (statistical profile of the program counter,
+  biased: it never sees the slow flash, use it only to rank functions).
+
+## 2026-11-18: GD32F130 loop, library level optimisations (env gd32f130_perf, zero torque)
+
+SimpleFOC from the local clone `C:/Dev/Arduino-FOC-gd32`, branch `perf/gd32-loop` (not pushed):
+test/gd32-deadtime + simplefoc `dev` merged + the commits below. SmoothingSensor changes (drivers) in
+`patches/simplefocdrivers-smoothing-perf.patch`, applied by hand to `.pio/libdeps/<env>/SimpleFOCDrivers`.
+Same measurement as the previous entry (`loop_us`, motor enabled, MC0/MT2, 0 A, wheel at rest). Each step
+includes the previous ones:
+
+| Step | Observer off | Observer on | Kept |
+|---|---|---|---|
+| Previous entry (env gd32f130) | 219 us | 286 us | |
+| + simplefoc `dev` merged (d/q decoupling lines commented out on dev) | 209 us | 277 us | yes |
+| + PR #529 as is (`__builtin_fmaxf/fminf`, call libm without -ffast-math) | 227 us | 297 us | no |
+| + #529 with plain templates (one evaluation per argument) | 209 us | 276 us | no (no gain: GCC already merged the repeated soft float calls) |
+| + `_sincos` result reused for the same angle (`BENCH_SINCOS_CACHE`, fastmath.cpp) | 203 us | 270 us | yes |
+| + one dt per loopFOC for the 2 current filters and 2 current PIDs (#325) | 189 us | 257 us | yes |
+| + LPF alpha cached when dt unchanged | 192.5 us | 259 us | no (dt changes by 1 us between loops) |
+| + PID derivative skipped when D = 0 | 188.5 us | 255 us | no (within noise) |
+| + `setPwm`: one division instead of 3; SmoothingSensor: 1/pole_pairs once | 185 us | 250 us | yes |
+| + `motion_downsample = 3` (move() every 4th loop, torque mode) | 171 us | 238 us | yes (config) |
+| + control loop files at -O2 (scripts/o2_hot.py, +2.7 KB flash) | **168 us** | **232 us** | yes |
+| Qfplib-M3 on the 171 us version (env gd32f130_perf_qfp, GPL, not in the repo) | **160.5 us** | **221 us** | option |
+
+Qfplib + -O2 together exceed the 32 KB zero wait state area by 900 bytes (the cold functions of the same
+files, calibration and alignment, would have to be moved out by section name).
+
+Where the time goes now (gd32f130_perf_qfp, observer off, total 163 us with the profiler):
+loopFOC 129 us = current filters + PIDs 42, setPhaseVoltage (SVPWM + setPwm) 40, getFOCCurrents 22,
+hall + smoothing sensor update 18, electrical angle 6; move 6 (mean, every 4th loop); bench only: debug
+dbg variables 20, safety 4. Without the bench code the loop would be ~140 us (~7 kHz). What is left is
+soft float arithmetic and comparisons spread over many small operations: the next step would be fixed point.
+
+Not measured (wheel at rest): HallSensor::getVelocity (3 divisions, returns 0 at rest) and the velocity
+dependent paths: the loop will be a bit slower when the wheel turns.
+
+## 2026-11-19: firmware size (build only, board not powered)
+
+Map file analysis (per object) of the bench and of Split_Hoverboard_SimpleFOC (branch perf/gd32-fast-loop):
+- `lib_archive = false` constructed and kept every global object of every library, used or not:
+  SimpleFOCRegisters (with `new`, so malloc), Wire, Wire1, SPI. `lib_archive = true` drops them. The reason
+  for `false` (the GD32 driver functions must replace the weak generic ones of SimpleFOC) is handled with
+  `-Wl,-u,adc_val -Wl,-u,sampling_point`, which force the two GD32 driver objects in. Checked in the
+  disassembly: ADC, PWM and sync functions are the GD32 ones. GD32 envs only: on the ESC1, "generic_mcu"
+  would come before "stm32" in the archive.
+- newlib `atof()` is `strtod()`: double precision, hexadecimal, locale, malloc, ~8 KB of flash and ~460 bytes
+  of RAM, only for Commander's typed numbers. `small_atof.c` (single precision atof/atoi/atol, GD32 only):
+  same float result as strtod for decimal and exponent inputs (checked against a float32 emulation).
+
+| Firmware | Flash before | Flash after | RAM before | RAM after |
+|---|---|---|---|---|
+| Split_Hoverboard_SimpleFOC GD32F130C8 (hall) | 45.8 KB | **33.7 KB** | 6088 B | **5356 B** |
+| Split_Hoverboard_SimpleFOC, SENSORLESS | 45.3 KB | 32.9 KB | 6012 B | 5152 B |
+| Bench env gd32f130 | 59.5 KB | **47.1 KB** | 7456 B | **6676 B** |
+| Bench env gd32f130_perf | 62.3 KB | 49.7 KB | | 6696 B |
+| Bench ESC1 (STM32G431), test env esc1_size | 84.3 KB | **67.5 KB** | 17044 B | **16288 B** |
+
+ESC1: same changes in the test env `esc1_size` (env esc1 unchanged). There "generic_mcu" comes before "stm32"
+in the archive, so `-Wl,-u,adcBuffer1 -Wl,-u,_Z12_getPwmStatePv` are required (b_g431_mcu.cpp, stm32_mcu.cpp):
+checked in the disassembly, the PWM/ADC functions are the STM32/B-G431 ones (HAL_ADC_Start_DMA, stm32_setPwm...).
+Removed there: strtod family, SimpleFOCRegisters, Wire with the ST I2C HAL. Not run on the ESC1 yet.
+
+**Update (same day): no lib_archive at all, the robust version.** SimpleFOC already declares `"libArchive": false`
+in its library.json, but any `lib_archive` line in platformio.ini (true or false) overrides it for every library.
+Without the line: SimpleFOC (and testbench, now with its own library.json, because fastmath.cpp replaces weak
+SimpleFOC functions) are linked as objects, the hardware functions are always the right ones on any MCU, no
+`-u` needed; the other libraries are archived, so their unused global objects (SimpleFOCRegisters...) go away.
+Wire/SPI stay (~0.9 KB on GD32, ~5 KB with the ST I2C HAL on the ESC1): SimpleFOC's I2C/SPI sensors refer to them.
+Rule: a library that replaces weak functions of another one must declare `"libArchive": false` (the sketch
+`src/` files are never archived). Exception to keep in mind: the STM32G4 CORDIC trig functions of SimpleFOC
+drivers are only linked if the sketch calls `SimpleFOC_CORDIC_Config()` (as their README says).
+
+| Firmware | Original | No lib_archive | + small atof | (forced archives + -u, not kept) |
+|---|---|---|---|---|
+| Split_Hoverboard_SimpleFOC GD32F130C8 | 45.8 KB / 6088 B | | **34.8 KB / 5548 B** | 33.7 KB |
+| Bench gd32f130 | 59.5 KB / 7456 B | | **48.2 KB / 6868 B** | 47.1 KB |
+| Bench ESC1 (esc1 / esc1_size) | 84.3 KB / 17044 B | 81.5 KB / 17020 B | **72.5 KB / 16656 B** | 67.5 KB |
+
+Still in the firmware, not removable from the sketch: float printing (`Print::printFloat` in double, ~2 KB of
+double soft float), the stepper/hybrid alignment code of CurrentSense (~2 KB, selected at run time),
+`characteriseMotor`, the framework timer code kept by the interrupt vectors (~2 KB). Not run on hardware yet.
+
+## 2026-11-19: SmoothingSensor PR measurement, hoverboard board with a GD32F103RC (STM32 core, genericSTM32F103RC; envs smooth_f103_dev / smooth_f103_fix)
+
+Board on the 26 V lab supply (1 A limit, power button bridged, ST-Link 3.3 V not connected), motor never enabled.
+Plain SimpleFOC upstream dev (ae7b3ad, `BENCH_NO_DEADTIME`), only the drivers differ: upstream dev (1f67e02) vs
+candas-agent fix/smoothing-sensor-float (1 / pole_pairs once per call, 0.001f). The MCU is a GD32F103RC, not an
+STM32F103 (IDCODE 0x13090414, Cortex-M3 r2p1 CPUID 0x412FC231). Its flash timing differs from the STM32F103
+(GD32 flash has a zero wait state area, size to check in the datasheet; STM32F103: 2 wait states at 64 MHz),
+so the absolute cycle counts may differ on a real STM32F103; dev vs fix stays comparable. The generic STM32F103RC variant
+runs at **64 MHz** (HSI), not 72. `XB` micro benchmarks, `sensor update` = SmoothingSensor::update() including
+the wrapped HallSensor::update() (virtual call through motor.sensor). The motor is stopped, so the velocity is
+forced (bench code, then restored) to time the phase correction branch. min = mean (stable).
+
+| Cycles per call | dev | fix | difference |
+|---|---|---|---|
+| sensor update, v = 0 (no phase correction) | 1309 | 1319 | +10 (+0.8 %) |
+| sensor update, v = +1 rad/s | 1590 | 1493 | **-97 (-6.1 %)** |
+| sensor update, v = -1 rad/s | 1447 | 1358 | **-89 (-6.2 %)** |
+
+fdiv = 156 cycles, fmul = 46. At standstill dev and fix both do one division (the compiler shares
+`_PI_3 / pole_pairs` between the two `_constrain` bounds); fix adds 2 fmul but drops the 2 double comparisons:
+about equal. While turning dev divides again for the phase correction: fix saves ~90-100 cycles, ~1.5 us per
+call at 64 MHz. Flash: update() 348 -> 332 bytes. Not measured: loop time with the motor running (needs the
+power stage).
+
+### Same board, wheel turning by hand, zero torque (MC0, MT2, target 0 A)
+
+First run with `-D SIMPLEFOC_STM32_ADC_INTERRUPT` (from the hoverboard sketch): wheel hard to turn. The measured
+currents were frozen (identical values at every read, ADC1 CR1 JEOCIE = 0 after the run while JDR1/JDR2 kept
+changing): the F1 HAL `HAL_ADC_IRQHandler` disables the JEOC interrupt when the regular group is software start
+and not continuous (stm32f1xx_hal_adc.c:1855), which is the SimpleFOC dev F1 configuration, so the interrupt
+buffer kept its first value. The current PI saw 0 A and applied random voltages (Vd up to -1.25 V at standstill),
+and the bench overcurrent cut was blind (the 1 A supply limit protected). Flag removed (TIM1 has a repetition
+counter, the injected registers are read directly): wheel free, measured iq/id within +-0.2 A (R_ds_on noise),
+Uq follows the velocity (~0.2-0.4 V per rad/s, 0.33 expected) but with the opposite sign: the zero angle
+2.09 rad / CCW from the sketch probably does not match this wiring, redo `SA` before any torque test.
+With the motor disabled the R_ds_on readings show ~-11 A (MOSFETs off), expected.
+
+`XP` loop profile, 6 reads (each = mean of 256 loops) per firmware, wheel turned by hand at ~1-7 rad/s:
+
+| µs | fix | dev |
+|---|---|---|
+| loopFOC (each read) | 200.0 199.8 197.6 197.4 199.7 198.4 | 200.7 202.0 201.0 197.3 201.6 200.5 |
+| loopFOC mean | **198.8** | **200.5** |
+| total loop mean | 264.4 | 268.1 |
+
+loopFOC is ~1.7 µs (0.8 %) shorter with the fix, in line with the micro benchmark (~1.5 µs per update while
+turning). Indicative only: 6 reads, hand-turned wheel (dev run had moments at standstill), `move` alternates
+between ~25 and ~35 µs in both builds.
+
+### Same board (GD32F103RC), control modes, env smooth_f103_dev (2026-11-19, 26 V, 1 A supply limit)
+
+- **Open loop, current mode 2 A** (sent MT0 before MC3 by mistake: the bench forced foc_current): phase A clean sine
+  ±2.0-2.2 A, period ~0.4 s = 1.05 rad/s with 15 pole pairs. **Open loop voltage 0.3 V**: ~0.17 A peak, almost
+  nothing (dead time + MOSFETs). Open loop current 1 A: iq 0.88-1.06 A, uq 0.8-1.0 V.
+- **Static vector** (angle open loop, target 0; at electrical angle 0 the voltage is on β, phase A gets nothing, read
+  phase B): 0.5 V -> 0.42 A, 0.7 V -> 0.89 A, 0.9 V -> 1.54 A, i.e. ~0.35 V lost then ~3.2 A/V. `ALIGN_VOLTAGE`
+  1.5 V would have pushed ~3.7 A: set to **0.8 V** in board_stm32f103_split.h.
+- **SA** (automatic alignment): CCW, zero electric angle 2.0944 (= 2π/3, hall sector boundary), same as the sketch
+  (2.09 / CCW). "PP check: fail - est. pp: 18" (hall estimate, typical ±20 %, the motor has 15). My earlier
+  "Uq sign opposite" remark was wrong: velocity and Uq were read 0.5 s apart while the wheel went back and forth.
+- **Closed loop torque**: ±0.3 A: iq follows (±0.31 mean) but the wheel does not move (static friction/cogging).
+  ±0.8 A: +12.7 / -12.8 rad/s, reverses in < 0.4 s, uq saturates at FOC_VOLTAGE_LIMIT 4 V (back-EMF) so iq drops
+  to ~0.45 A. Stops in ~0.6 s at 0 A.
+- **Closed loop velocity** (velocity sampled at ~250 Hz from dbg with pyOCD, stats after 1 s, 3 s per target):
+
+| P | I | Tf [s] | 2 rad/s: mean / sd / time stopped | 5 rad/s: mean / sd |
+|---|---|---|---|---|
+| 0.5 | 10 | 0.005 (SimpleFOC default, 0.2 s reads) | 0 to 4.3 | 4.7 to 5.3 |
+| 0.6 | 5 | 0.05 (old sketch, voltage mode) | 0.3 to 3.7 | 3.3 to 6.7 (oscillates ~1.2 Hz) |
+| 0.3 | 5 | 0.005 | 2.04 / 1.35 / 15 % | 5.00 / 0.15 |
+| 0.6 | 5 | 0.005 | 2.00 / 1.19 / 12 % | 5.00 / 0.16 |
+| 1.0 | 5 | 0.005 | 1.97 / 1.06 / 11 % | 5.00 / 0.20 |
+| 0.3 | 5 | 0.01 | 2.09 / 1.53 / 19 % | 5.00 / 0.10 |
+| 0.6 | 5 | 0.01 | 1.99 / 1.39 / 21 % | 5.00 / 0.12 |
+| 1.0 | 5 | 0.01 | 1.97 / 1.14 / 7 % | 5.00 / 0.13 |
+| 0.3 | 5 | 0.02 | 2.05 / 1.57 / 21 % | 5.00 / 0.12 |
+| 0.6 | 5 | 0.02 | 1.94 / 1.37 / 16 % | **5.00 / 0.07** |
+| 1.0 | 5 | 0.02 | 2.03 / 1.11 / 3 % | 5.00 / 0.16 |
+| 1.0 | 2 | 0.005 | 1.98 / 1.14 / 12 % | 5.01 / 0.20 |
+| 1.0 | 10 | 0.005 | 1.96 / 1.18 / 12 % | 5.00 / 0.19 |
+| 1.0 | 20 | 0.005 | 1.98 / 1.44 / 21 % | 5.00 / 0.37 |
+
+  5 rad/s is fine with every set. 2 rad/s stays stick-slip with every set (sd > 1 rad/s, stops): at 2 rad/s the halls
+  give only ~29 edges/s (6 per electrical turn, 15 pole pairs), one velocity update every ~35 ms, plus strong
+  friction/cogging; higher P helps a little (sd 1.06-1.11) at the cost of iq noise (sd 0.8-0.9 A). Gains alone do
+  not fix low speed; needs a better velocity estimate (higher resolution sensor, observer) or friction feed-forward.
+- **Closed loop angle** (MC2, velocity PI P 1.0 I 5 Tf 0.01, P_angle default, velocity_limit 10; target set to the
+  current shaft angle before enabling): +3 rad and back. Peak velocity 12.1 rad/s (iq up to ±1.8 A), at the target in
+  < 1 s, final error +0.002 / 0.000 rad as seen by the sensor (hall resolution 2π/90 = 0.07 rad mechanical, so the real
+  accuracy is about ±0.035 rad). Holding current 0.1-0.5 A at standstill. No fault.
+
+## 2026-11-19: SIMPLEFOC_STM32_ADC_INTERRUPT on a genuine STM32F103 (same hoverboard board model)
+
+Chip: STM32F103 high density, IDCODE 0x10036414 (rev 0x1003), CPUID 0x411FC231 (Cortex-M3 r1p1), 256 KB flash,
+read protection off. 26 V supply, motor disabled for the whole test (the hall input reads state 7 = not connected).
+Same SimpleFOC dev (ae7b3ad) and drivers dev, env `f103_adc_it` (= smooth_f103_dev + `-D SIMPLEFOC_STM32_ADC_INTERRUPT`)
+vs `smooth_f103_dev` (no flag). Phase currents read 3 times (XB "pc" line, `currentSense.getPhaseCurrents()`):
+
+| Build | ADC1 CR1 (JEOCIE bit 7) | JDR1 / JDR2 | Phase currents A / B, 3 reads |
+|---|---|---|---|
+| with the flag | 0x100 (JEOCIE = 0) | changing (0x906, 0x8FC / 0x8F4, 0x8F2) | -0.039548 / -0.041217, **identical 3 times** |
+| without | 0x100 | changing | -11.50/-11.56, -11.42/-11.40, -11.71/-11.64 (MOSFETs off, R_ds_on reading meaningless, expected) |
+
+Same as on the GD32F103: with the flag the interrupt buffer keeps the value of the first conversion (taken during the
+offset calibration, so it reads ~0 A forever). Cause: the F1 HAL `HAL_ADC_IRQHandler` disables the JEOC interrupt after
+the first injected conversion when the regular group is software start and not continuous
+(stm32f1xx_hal_adc.c:1855), which is the SimpleFOC dev F1 ADC configuration. Not GD32 specific.
+
+Root cause found in the SimpleFOC history: the F1 ADC regular group used `ContinuousConvMode = ENABLE` since the
+flag was added (5c724d9, 2023-11, Candas1) up to 2025-12, so the HAL condition was false and the JEOC interrupt
+stayed enabled (the user tested it then). Commit 68120bf (2026-01-07, "inital support for reading regular channels")
+changed `_adc_init` in stm32f1_hal.cpp to `ContinuousConvMode = DISABLE` (with a new `_adc_init_regular`), which makes
+`HAL_ADC_IRQHandler` disable JEOC after the first injected conversion: regression on F1 with SIMPLEFOC_STM32_ADC_INTERRUPT.
+
+### Fix candidate tested on the genuine STM32F103 (env f103_adc_it_fix, local branch fix/f1-adc-interrupt from simplefoc dev ae7b3ad)
+
+One line in stm32f1_mcu.cpp `HAL_ADCEx_InjectedConvCpltCallback`: `__HAL_ADC_ENABLE_IT(AdcHandle, ADC_IT_JEOC);` after
+`_handleInjectedConvCpltCallback` (the F1 HAL calls the callback right after disabling JEOC, stm32f1xx_hal_adc.c:1858-1868).
+- Motor disabled: ADC1 CR1 = 0x180 (JEOCIE = 1), phase currents change between reads (-11.7/-11.7, -11.2/-11.1,
+  -11.4/-11.4, MOSFETs off as without the flag).
+- Zero torque, wheel turned by hand ~20 s (7913 dbg reads): JEOCIE stays 1, iq mean +0.002 A sd 0.144 A, 4172 distinct
+  iq values (not frozen), |vel| up to 6.2 rad/s, Uq follows the velocity with the same sign, ~0.30 V per rad/s
+  (0.33 expected from KV 17), read in the same dbg sample. No fault.
+Other families (reading the installed HAL of the STM32 core 2.12, not tested on hardware): F4/F7 only disable JEOC when
+the injected group is also software triggered, G4/L4/H7 only when the injected group is software triggered; SimpleFOC
+triggers injected conversions from the timer TRGO in every family, so only F1 is affected.
+Full build time of a new env on this PC: 478 s (Defender exclusions added by the user did not change it).
+
+### Motor running on the genuine STM32F103: interrupt mode (flag + fix) vs registers read directly (no flag)
+
+Same board, same firmware apart from the flag, wheel free, torque ±0.8 A (4 s each) then velocity 5 rad/s (5 s, P 1.0
+I 5 Tf 0.01), `XP` = mean of 256 loops:
+
+| µs | no flag (injected registers read directly) | flag + fix (JEOC interrupt every PWM period) |
+|---|---|---|
+| loopFOC, torque | 291-295 | 326-331 (+35, +12 %) |
+| move, torque | 54-55 | 60-61 |
+| total loop, torque | 397-402 | 442-450 (+46, +11.5 %) |
+| total loop, velocity | 424-428 | 476-478 |
+
+Torque identical in both modes (±12.7 rad/s). The interrupt (HAL_ADC_IRQHandler + SimpleFOC callback, 16 kHz) costs
+~11 % of the CPU on this F103 at 64 MHz: reading the injected registers directly when the timer has a repetition
+counter (the automatic choice) is clearly better; the flag is only for forcing the interrupt. Same firmware without
+the flag on the GD32F103: loopFOC ~199 µs vs 293 µs on the STM32F103 (flash wait states). At 5 rad/s the velocity
+oscillates on the STM32 in both modes (sd 2.2-2.4 rad/s vs 0.13 on the GD32): the PI tuned on the faster GD32 loop
+does not suit the slower STM32 loop, unrelated to the interrupt.
+
+**Run time bus voltage** (`_readRegularADCVoltage(PC2)` every 20 ms, the feature added by simplefoc 68120bf; PC2 =
+DCLINK of EFeru defines.h): works in both modes while the motor runs, **0 errors** (interrupt mode: 2837 reads,
+no flag: 6682 reads), no visible effect on the current control (same torque) and ~1-2 µs mean loop cost. Read
+29.2-29.5 V stopped, 29.6-30.0 V running, for 26.0 V on the supply display with the gain 33 of EFeru's default
+calibration: gain set to 29.3 for this board.
+
+## 2026-11-20: hall sensor calibration (tools/hall_calib.py), genuine STM32F103 board, motor remounted
+
+Reassembly check first (open loop 1 A: phases ±1.4/±1.3 A centred, hall sequence 4-5-1-3-2-6 clean, 85 transitions;
+torque ±0.8 A: +12.65/-12.64 rad/s; Vbus 26.3 V, 0 errors): same as before the drop.
+
+Calibration: angle open loop + current control (MC4 + MT2), 1.5 A, 4 electrical turns per direction at 6 s per
+turn, separate enables, PC reading dbg with pyOCD. Transitions saved in data/hall_calib_stm32f103.csv. No fault.
+Forward sequence 2-6-4-5-1-3 = sectors 4-3-2-1-0-5 (decreasing: consistent with sensor_direction CCW). All three
+sensors toggle.
+
+| Edge | forward | backward | fwd-bwd | mean | spread fwd/bwd | spacing | error vs 60° grid |
+|---|---|---|---|---|---|---|---|
+| 2-6 | 37.7 | 16.2 | +21.5 | 26.9 | 2.5 / 2.8 | 65.9 | -1.1 |
+| 4-6 | 103.4 | 82.2 | +21.2 | 92.8 | 1.1 / 2.8 | 57.5 | +4.8 |
+| 4-5 | 162.5 | 138.0 | +24.4 | 150.3 | 1.7 / 2.0 | 58.6 | +2.2 |
+| 1-5 | 219.5 | 198.2 | +21.3 | 208.8 | 1.5 / 1.8 | 57.5 | +0.8 |
+| 1-3 | 276.5 | 256.2 | +20.3 | 266.3 | 0.5 / 1.3 | 56.6 | -1.7 |
+| 2-3 | 330.8 | 315.0 | +15.8 | 322.9 | 0.7 / 0.9 | 64.0 | -5.1 |
+
+(degrees electrical, rotor angle = open loop angle + 90°)
+
+| State | centre from samples (fwd / bwd / mean) | centre from edges | width |
+|---|---|---|---|
+| 1 | 248.2 / 227.2 / 237.7 | 237.6 | 57.5 |
+| 2 | 4.4 / 345.9 / 355.2 | 354.9 | 64.0 |
+| 3 | 303.8 / 285.2 / 294.5 | 294.6 | 56.6 |
+| 4 | 133.1 / 110.1 / 121.6 | 121.5 | 57.5 |
+| 5 | 191.0 / 168.0 / 179.5 | 179.5 | 58.6 |
+| 6 | 70.4 / 49.4 / 59.9 | 59.9 | 65.9 |
+
+- Edges within -5.1 / +4.8° electrical of an ideal 60° grid (0.34° mechanical); sector widths 56.6 to 65.9°.
+- Both centre methods agree within 0.3°: no visible distortion of the edges by cogging at this resolution.
+- fwd-bwd ~21° (16-24): rotor lag behind the field (friction, cogging at 1.5 A) + hall hysteresis, removed by the mean.
+- Repeatability over the 4 turns (different pole pairs) 0.5-2.8°: magnet-to-magnet differences stay small.
+- Centres give an equivalent zero electric angle of ~120-125° (mean ~122°) if the SimpleFOC sector angle is taken as
+  the centre (direction CCW): close to the 2.0944 rad (120°) found by SA. Convention to confirm before using it.
+
+### Hall table in motion (lib/testbench/src/hall_table.*, command ST0/ST1/ST2), same board
+
+HallTableSensor (bench only): rotor angle from the measured edges (entry edge + velocity * time since the transition,
+limited to the measured sector width; middle of the sector at standstill), rotor frame (CW, zero 0). Standstill check
+in state 3: SmoothingSensor 300.3°, measured table 294.6° (centre), ideal grid 298.0°: conventions consistent.
+Velocity PI P 0.6 I 5 Tf 0.02 for all, stats after 1 s:
+
+| Mode | torque +0.8 A | 2 rad/s: mean / sd / stopped | 5 rad/s: mean / sd | iq sd at 2 / 5 rad/s |
+|---|---|---|---|---|
+| SmoothingSensor (today's code) | +12.65 rad/s | 2.00 / 2.26 / 17 % | 5.06 / 2.78 | 1.05 / 1.10 A |
+| same class, ideal 60° grid | +12.72 | 1.98 / 2.54 / 12 % | 5.09 / 2.70 | 1.15 / 1.10 |
+| same class, measured table | +12.78 | 2.07 / 2.39 / 16 % | 5.02 / 2.73 | 1.09 / 1.09 |
+
+No measurable difference: the ±5° edge errors are hidden by the velocity loop oscillation of this slower STM32 loop
+(sd 2.3-2.8 rad/s in every mode, vs 0.07-0.2 on the GD32 with similar gains) and by the hall velocity estimate.
+The torque mode top speed is +1 % with the table but within the run-to-run spread seen before (12.64-12.78).
+Conclusion: the hall table is not worth a library change for this motor for now; tune the STM32 velocity loop first,
+then a finer metric (id ripple at constant speed in torque mode) would be needed to see the table.
+
+### Velocity PI sweep for the STM32F103 loop (same sweep script, 3 s per target, stats after 1 s)
+
+| P | I | Tf [s] | 2 rad/s: sd / stopped | 5 rad/s: mean / sd | iq sd at 5 rad/s |
+|---|---|---|---|---|---|
+| 0.2 | 5 | 0.01 | 1.93 / 39 % | 4.97 / 3.58 | 0.80 |
+| 0.4 | 5 | 0.01 | 1.75 / 29 % | 5.00 / 0.15 | 0.15 |
+| 0.7 | 5 | 0.01 | 2.21 / 33 % | 5.04 / 1.96 | 0.96 |
+| 0.2 | 5 | 0.02 | 4.66 / 2 % | 4.83 / 4.50 | 1.08 |
+| 0.4 | 5 | 0.02 | 1.80 / 27 % | 4.96 / 3.09 | 0.97 |
+| 0.7 | 5 | 0.02 | 2.75 / 7 % | 5.01 / 2.90 | 1.19 |
+| 0.2 | 5 | 0.04 | 5.95 / 2 % | 4.14 / 5.36 | 1.28 |
+| 0.4 | 5 | 0.04 | 3.49 / 4 % | 5.18 / 3.44 | 1.17 |
+| 0.7 | 5 | 0.04 | 2.82 / 5 % | 5.06 / 2.89 | 1.30 |
+| 0.4 | 1 | 0.01 | **1.33 / 18 %** | **5.01 / 0.12** | **0.14** |
+| 0.4 | 2 | 0.01 | 1.45 / 21 % | 5.00 / 0.11 | 0.14 |
+| 0.4 | 10 | 0.01 | 3.70 / 13 % | 5.00 / 3.65 | 1.18 |
+
+On the slower STM32 loop (~400 µs) a longer velocity filter or a higher I makes it oscillate (sd 3-6 rad/s,
+even reversing); best **P 0.4, I 1-2, Tf 0.01**: 5 rad/s sd 0.11-0.12 rad/s, iq sd 0.14 A. 2 rad/s stays stick-slip
+(sd 1.3, 18 % stopped): hall velocity + friction, as on the GD32. The previous hall table comparison (P 0.6 I 5
+Tf 0.02) was done in an oscillating loop and is not conclusive.
+
+### Hall table comparison redone with the tuned PI (P 0.4, I 1, Tf 0.01)
+
+| Mode | torque +0.8 A | 2 rad/s: sd / stopped | 5 rad/s: mean / sd | iq sd 2 / 5 | id mean / sd at 5 rad/s |
+|---|---|---|---|---|---|
+| SmoothingSensor | +12.67 | 1.32 / 16 % | 5.01 / 0.11 | 0.42 / 0.14 | -0.002 / 0.14 |
+| ideal 60° grid | +12.72 | 1.26 / 15 % | 5.00 / 0.12 | 0.41 / 0.14 | 0.000 / 0.14 |
+| measured table | +12.79 | 1.33 / 17 % | 5.01 / 0.12 | 0.42 / 0.15 | -0.003 / 0.14 |
+
+With a stable velocity loop the three modes are still identical within the noise (velocity, iq and id ripple).
+Only the torque mode top speed (voltage limited) is in the same order in both runs: SmoothingSensor < ideal grid <
+table, +0.9 %: a small but repeatable effect of a more exact angle at the voltage limit. On this motor (hall edges
+within ±5°) the table brings nothing measurable for low speed stability; not worth a library change for now.
+
+### Low speed (2 rad/s) improvement attempts, tuned PI (P 0.4, I 1, Tf 0.01), same board
+
+1. **Friction feed-forward** (bench command XF, `feed_forward_current.q` = XF × sign of the velocity target, linear
+   below 0.5 rad/s): 0 / 0.2 / 0.3 A give the same result (2 rad/s sd 1.30-1.35, 14-18 % stopped). The PI integrator
+   just carries less; friction does not drive the stick-slip cycle.
+2. **Velocity estimate** (bench HallTableSensor, own velocity, modes ST3 ideal grid / ST4 table): edge to edge velocity
+   = measured width of the sector just left / time spent in it, never above current sector width / time since the
+   last edge (decays instead of holding then dropping to 0). Independent metric: hall edge intervals seen by the PC
+   (~4 ms resolution), count of intervals > 100 ms (~3x nominal at 2 rad/s = real stall).
+
+| Mode | 2 rad/s: vel sd / iq sd / edge interval cv / >100 ms / max | -2 rad/s: cv / >100 ms | 5 rad/s: vel sd / iq sd |
+|---|---|---|---|
+| SmoothingSensor (HallSensor velocity) | 1.18 / 0.38 / 80 % / 7 / 134 ms | 88 % / 9 | 0.13 / 0.14 |
+| ideal grid + own velocity, 1st version (last sector only) | 1.09 / 0.35 / - | - | 0.26 / 0.16 |
+| table + own velocity, 1st version | 0.98 / 0.33 / - | - | 0.57 / 0.21 |
+| ideal grid + blended (last sector < 2 rad/s, 6 sector average > 4) | **0.36 / 0.17 / 27 % / 0 / 63 ms** | 60 % / 2 | 2.00 / 0.61 |
+| table + blended | **0.41 / 0.17 / 37 % / 0 / 86 ms** | 57 % / 2 | 1.87 / 0.57 |
+
+At 2 rad/s the new estimate removes the stalls (independent hall metric: 7 → 0 intervals > 100 ms, cv 80 → 27-37 %)
+and halves the current ripple. Backward less improved (9 → 2 stalls). At 5 rad/s the 6 sector average (one electrical
+turn, ~80 ms) adds too much delay: the loop oscillates (sd 1.9-2.0). Next: keep the decaying last sector velocity at
+low speed and blend towards HallSensor's velocity (sd 0.13 at 5 rad/s) instead of the 6 sector average.
+
+### Low speed campaign (tools/lowspeed_campaign.py, data/lowspeed_campaign.csv), 2 passes, PI P 0.4 I 1 Tf 0.01
+
+2 and -2 rad/s for 10 s, 5 rad/s for 8 s (2 s settling excluded), each a separate enable, second pass in reverse
+order. Hall edges counted by the PC (expected 229 at 2 rad/s, 430 at 5 rad/s); stalls = edge intervals > 3x nominal.
+Mean of the 2 passes (± = difference between passes):
+
+| Config | 2 rad/s: edges / cv / stalls / iq sd | -2 rad/s: cv / stalls / iq sd | 5 rad/s: cv / iq sd |
+|---|---|---|---|
+| C0 SmoothingSensor | 216 / 82 % / 16.5 ±3 / 0.40 | 92 % / 24.0 ±6 / 0.42 | 44 % / 0.15 |
+| V0 grid + HallSensor velocity (control) | 215 / 86 % / 20.0 ±6 / 0.41 | 87 % / 18.0 ±2 / 0.41 | 47 % / 0.15 |
+| V1 HallSensor + decay | 218 / 66 % ±27 / 9.0 ±16 / 0.28 ±0.07 | 73 % ±23 / 11.5 ±17 / 0.30 | 50 % / 0.16 |
+| V2 last sector (measured width) + decay | 217 / 75 % / 10.5 ±5 / 0.31 | 75 % / 12.0 ±4 / 0.31 | 48 % / 0.20 |
+| V3 6 sectors + decay | 250 / 96 % / 16.0 ±2 / 0.33 | 97 % / 13.5 ±1 / 0.34 | 73 % / 0.51 |
+| V4 V3 low / HallSensor high | 244 / 88 % / 16.0 ±4 / 0.30 | 87 % / 14.5 ±1 / 0.30 | 47 % / 0.15 |
+| R20 position ramp, P_angle 20 | 320 / 83 % / 1.0 / 1.17 | 84 % / 3.0 / 1.16 | 85 % / 0.99 |
+| R5 position ramp, P_angle 5 | 251 / 88 % / 10.0 / 0.59 | 91 % / 15.0 / 0.59 | 45 % / 0.15 |
+
+- V0 = C0: the test class itself changes nothing (good control).
+- More edges than expected (V3/V4 ~245, R5 251, R20 ~320 for 229) means back-and-forth motion (edges counted in both
+  directions), not a faster wheel: the position ramps vibrate (iq sd 0.6-1.2 A), R20 also at 5 rad/s.
+- The real mean speed in velocity mode is ~6 % low (216/229 edges) while the estimate reads 2.00: the HallSensor
+  velocity overestimates around stalls.
+- Best at 2 rad/s: V2 (consistent: stalls -40 to -50 %, iq ripple -25 %, no extra edges; 5 rad/s iq 0.20 vs 0.15)
+  and V1 (best single run, cv 52 %, 1 stall, but very different between passes). V4 keeps 5 rad/s intact with
+  -25 % iq ripple at 2 rad/s but shows extra edges.
+- The edge count cannot tell forward from backward edges: a signed count (direction from the hall sequence) would
+  separate jitter from real motion. To add before deciding.
+
+### Low speed campaign 2: signed hall edges, 3 passes (data/lowspeed_campaign2.csv)
+
+Edges classified forward/backward from the hall sequence (2-6-4-5-1-3), stalls and cv on the edges in the direction
+of motion only, true speed = net edges × 4° mechanical / 8 s. Mean (min-max) over 3 passes:
+
+| Config | 2 rad/s: true speed / stalls / cv / iq sd | -2 rad/s: true speed / stalls / iq sd | 5 rad/s: true speed / iq sd |
+|---|---|---|---|
+| C0 SmoothingSensor (HallSensor velocity) | 1.85 / 24 (21-26) / 89 % / 0.42 | 1.84 / 23 (17-27) / 0.41 | 4.99 / 0.14 |
+| V1 HallSensor velocity + decay | 1.91 / **4 (0-10)** / 59 % / **0.27** | 1.86 / 12 (5-19) / 0.32 | 5.02 / 0.16 |
+| V2 last sector (measured width) + decay | 1.90 / **3.3 (2-5)** / 66 % / 0.29 | 1.90 / **9 (2-14)** / **0.28** | 5.08 / 0.22 |
+| V4 6 sectors + decay low, HallSensor high | 2.10 / 15 (12-17) / 88 % / 0.30 | 2.13 / 19 (18-20) / 0.31 | 5.00 / 0.15 |
+
+- Almost no backward edges (0-3 per run): the extra edges of V4 in campaign 1 were a real overspeed (+5 %), not jitter.
+- Speed accuracy at 2 rad/s: HallSensor velocity -7.5 %, V1/V2 -5 %, V4 +5 % (the 6 sector average with decay
+  underestimates the velocity, the PI pushes faster).
+- V1 and V2 cut the stalls by 50-85 % (forward) and 45-60 % (backward) and the current ripple by ~30 %. At 5 rad/s
+  V1 is neutral (iq sd 0.16 vs 0.14), V2 is worse (0.22).
+- Over both campaigns V1 varies more between runs (forward stalls 17, 1, 10, 2, 0) than V2 (13, 8, 3, 5, 2).
+
+Summary of all low speed attempts on this motor (hall only, STM32F103, tuned PI P 0.4 I 1 Tf 0.01):
+hall table (angle): no effect; friction feed-forward: no effect; position ramp: vibrates; 6 sector average: worse at
+speed; **decaying velocity between hall edges (V1)**: clear gain at low speed, neutral at 5 rad/s, smallest change
+(only HallSensor::getVelocity); measured sector widths on top (V2): a bit more regular backward, worse at 5 rad/s.
+
+### A/B: SimpleFOC dev vs candas-agent fix/hall-velocity-decay (b691018), same board and protocol
+
+Library HallSensor::getVelocity() changed (no test class): SmoothingSensor + HallSensor, PI P 0.4 I 1 Tf 0.01,
+3 passes (data/hallvel_ab_branch.csv, data/hallvel_ab_dev.csv). Branch run first, then dev reflashed.
+
+| | 2 rad/s: stalls / cv / iq sd / true speed | -2 rad/s: stalls / iq sd | 5 rad/s: cv / iq sd / true speed |
+|---|---|---|---|
+| SimpleFOC dev | 28.3 (25-31) / 93 % / 0.43 / 1.82 | 22.0 (21-23) / 0.43 | 36 % / 0.14 / 4.99 |
+| fix/hall-velocity-decay | **10.3 (6-14) / 82 % / 0.29** / 1.83 | **5.3 (2-9) / 0.26** | 38 % / 0.14 / 5.00 |
+
+Stalls -64 % forward, -76 % backward; current ripple -33 / -40 %; 5 rad/s identical. The real mean speed stays
+~8 % low at 2 rad/s in both (not addressed by this change). One dev run at -2 rad/s shows a 1.37 s gap with 8 skipped
+hall states and only 103 net edges while the estimated velocity and iq stayed normal: most likely a pyOCD read
+stall on the PC, not the wheel (its stall count, 21, is in line with the other dev runs).

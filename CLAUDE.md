@@ -23,6 +23,18 @@ branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard spli
 - Commands go through RTT (tools `--port rtt --env gd32f130`), no serial port, no `pio test`.
 - Current sense on the MOSFETs R_ds_on: less accurate than the ESC1 shunts, check the offsets at power-up.
 - Dead time fixed by the GD32 driver (60 cycles, 0.83 us); DEAD_ZONE in the board file only serves the expected value.
+- Only the first 32 KB of flash run without wait states: ld/gd32f130_fastloop.ld places the loop code and the
+  virtual tables there (link fails if `__fast_end` > 0x08008000). Code called every loop goes in that list.
+  The linker script is not tracked by the build: delete .pio/build/<env>/firmware.elf after changing it.
+- No `lib_archive` in platformio.ini: it would override the library.json of SimpleFOC and testbench
+  (`"libArchive": false`, they replace weak functions). The other libraries are archived (unused objects dropped).
+
+## Gen 1 hoverboard mainboard (STM32F103RC / GD32F103RC, envs `smooth_f103_*`, `hallvel_f103`, `f103_adc_it*`)
+- Plain SimpleFOC (`BENCH_NO_DEADTIME`), right motor, RTT. Power button bridged on the bench: the board is on as soon
+  as the supply is on; disconnect the ST-Link 3.3 V when the board is supplied.
+- `ALIGN_VOLTAGE` 0.8 V gives ~1.5 A (1.5 V would give ~3.7 A): never raise it without asking.
+- Without `SIMPLEFOC_STM32_ADC_INTERRUPT` (frozen currents with SimpleFOC dev on F1, see #594).
+- Commands that move the motor: ME1, SA, V<rad/s>, and the tools hall_calib.py, lowspeed_campaign.py.
 
 ## Workflow
 - Build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.

@@ -27,14 +27,20 @@ The compensation adds `±deadtime_compensation` to each phase voltage in the dir
 
 `motor.calibrateDeadtimeCompensation(max_current)` measures the effective dead-time voltage error: a DC voltage is applied on the d axis (rotor aligned, no movement) in both directions, a line `U = R·I + U0` is fitted, and `deadtime_compensation = 3/4 · U0` (the three phase errors seen on the alpha axis add up to 4/3 of one phase error).
 
+Overview of all the topics explored with this bench (bugs, performance, features, branches and PRs): [docs/topics.md](docs/topics.md). Measurements: [docs/test-log.md](docs/test-log.md).
+
 ## Hardware
 
-Two boards are supported, selected by the PlatformIO environment (board settings in `include/board_*.h`):
+Three board types are supported, selected by the PlatformIO environment (board settings in `include/board_*.h`):
 
 | Env | Board | Commands | Notes |
 |---|---|---|---|
 | `esc1` | B-G431B-ESC1 | serial (ST-Link virtual COM port) | low-side current sensing with the STM32G4 op-amps, 12 V |
 | `gd32f130` | hoverboard split board TT-SD2.2 "master" (GD32F130C8) | RTT through an ST-Link (`--port rtt`) | current sensing on the low side MOSFETs R_ds_on (2 phases), 26 V, fixed 0.83 µs dead time |
+| `smooth_f103_dev`, `hallvel_f103`, ... | gen 1 hoverboard mainboard (STM32F103RC or GD32F103RC), right motor | RTT through an ST-Link (`--port rtt`) | plain SimpleFOC (no dead-time compensation, `BENCH_NO_DEADTIME`), R_ds_on current sense, DC link voltage read at run time |
+
+All the libraries come from GitHub, pinned to the commits that were measured (see the comments in `platformio.ini`):
+the project builds on any machine. Only `lib/qfplib` (GPL, envs `*_qfp`) has to be added by hand.
 
 - Hoverboard motor, 15 pole pairs (hall sensors not used: open loop only)
 - **Lab power supply with current limit**
@@ -50,6 +56,15 @@ Two boards are supported, selected by the PlatformIO environment (board settings
 - Hall sensors (PB11, PF1, PC14) with the SimpleFOC drivers `SmoothingSensor`, linked at start-up with the known alignment of the split board sketch (zero electric angle 2.09 rad, CCW): no motor movement at start-up. `S` prints their state, `SA` re-runs the automatic SimpleFOC alignment if needed (**the motor moves**, then it is disabled). The closed loop modes are allowed (`MC0` torque, `MC1` velocity), always with current control (`MT2`), torque target clamped to `TORQUE_TARGET_MAX` (1 A).
 - Observer off at start-up on this board (`DO1` to enable it): no FPU, the loop takes ~0.8 ms without it.
 - Commands: same as below, through RTT: `python tools/ol_run.py --port rtt --env gd32f130 ...`, `python tools/campaign.py --port rtt --env gd32f130 ...`.
+
+### Gen 1 hoverboard mainboard (STM32F103RC / GD32F103RC)
+
+- Pins from [EFeru's hoverboard firmware](https://github.com/EFeru/hoverboard-firmware-hack-FOC/blob/main/Inc/defines.h) (right motor): PWM on TIM1 (PA8/9/10, PB13/14/15), phase currents PC4/PC5 (R_ds_on), halls PC10/11/12, power latch PA5, DC link voltage PC2. Board file `include/board_stm32f103_split.h`.
+- Some boards carry a GD32F103RC instead of the STM32F103RC: same firmware (STM32 Arduino core, generic STM32F103RC variant, 64 MHz on the internal oscillator), but different flash timings.
+- `ALIGN_VOLTAGE` 0.8 V (≈1.5 A on this board, see the test log); DC link voltage gain 29.3 (calibrated on one board, EFeru's default calibration gives 33).
+- Do not add `-D SIMPLEFOC_STM32_ADC_INTERRUPT` with SimpleFOC dev: the F1 HAL disables the injected interrupt and the currents freeze (fixed in [simplefoc/Arduino-FOC#594](https://github.com/simplefoc/Arduino-FOC/pull/594)).
+- Velocity PI that works on this slower loop (~400 µs): `MVP0.4`, `MVI1`, `MVF0.01`.
+- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
 
 ### Safety
 
@@ -106,6 +121,8 @@ In open loop (voltage mode) the voltage limit is managed by the test bench (`DB`
 | `XI4` | overcurrent threshold [A] on any phase |
 | `XH1` / `XH0` | heartbeat on/off: the motor is disabled if no command arrives for 2 s |
 | `XC` | clear the last fault |
+| `XP` | loop profile: mean/max time of each part of the loop, CPU cycle counter (`-D BENCH_PROFILE`, env gd32f130) |
+| `XB` | micro benchmarks of the float primitives, motor disabled (`-D BENCH_MICROBENCH`, ~3 KB of flash, indicative only) |
 | `R838` | record 800 samples (phase A current, compensation, observer angle error) every 838 µs, then disable the motor and dump them as CSV |
 | `RN838` | same without serial dump and without disabling the motor (read with pyOCD) |
 | `RD` | dump the last recording again |

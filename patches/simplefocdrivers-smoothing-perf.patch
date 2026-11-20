@@ -1,0 +1,37 @@
+diff --git a/src/encoders/smoothing/SmoothingSensor.cpp b/src/encoders/smoothing/SmoothingSensor.cpp
+index 85d7f00..57b9447 100644
+--- a/src/encoders/smoothing/SmoothingSensor.cpp
++++ b/src/encoders/smoothing/SmoothingSensor.cpp
+@@ -27,12 +27,15 @@ void SmoothingSensor::update() {
+   // Perform angle prediction, using low-pass filtered velocity. But don't advance more than
+   // pi/3 (equivalent to one step of block commutation) from the last true angle reading.
+   float dt = (_micros() - angle_prev_ts) * 1e-6f;
+-  angle_prev += _motor.sensor_direction * _constrain(_motor.shaft_velocity * dt, -_PI_3 / _motor.pole_pairs, _PI_3 / _motor.pole_pairs);
++  // 1/pole_pairs computed once (divisions are slow without FPU)
++  if (_motor.pole_pairs != inv_pp_for) { inv_pp_for = _motor.pole_pairs; inv_pp = 1.0f / _motor.pole_pairs; }
++  float max_step = _PI_3 * inv_pp;
++  angle_prev += _motor.sensor_direction * _constrain(_motor.shaft_velocity * dt, -max_step, max_step);
+ 
+   // Apply phase correction if needed
+   if (phase_correction != 0) {
+-    if (_motor.shaft_velocity < -0.001) angle_prev -= _motor.sensor_direction * phase_correction / _motor.pole_pairs;
+-    else if (_motor.shaft_velocity > 0.001) angle_prev += _motor.sensor_direction * phase_correction / _motor.pole_pairs;
++    if (_motor.shaft_velocity < -0.001f) angle_prev -= _motor.sensor_direction * phase_correction * inv_pp;
++    else if (_motor.shaft_velocity > 0.001f) angle_prev += _motor.sensor_direction * phase_correction * inv_pp;
+   }
+ 
+   // Handle wraparound of the projected angle
+diff --git a/src/encoders/smoothing/SmoothingSensor.h b/src/encoders/smoothing/SmoothingSensor.h
+index af38343..b4569f4 100644
+--- a/src/encoders/smoothing/SmoothingSensor.h
++++ b/src/encoders/smoothing/SmoothingSensor.h
+@@ -42,6 +42,9 @@ class SmoothingSensor : public Sensor
+ 
+     Sensor& _wrapped;
+     const FOCMotor& _motor;
++  protected:
++    int inv_pp_for = 0;    //!< pole pairs inv_pp was computed for
++    float inv_pp = 1.0f;   //!< 1 / pole pairs
+ };
+ 
+ #endif
