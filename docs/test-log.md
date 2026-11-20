@@ -1081,3 +1081,22 @@ iq on the first loop after enabling, 3 runs each:
 #596 as opened always restarts at about half the value from before the pause (then decays over a few loops); dev and
 the fix restart at the noise level (+-0.4 A at standstill: one dev run at 0.37 A). `Ts` priority: code review only
 (no bench command sets Ts).
+
+## 2026-11-20 - setPwm one limit / one division, with a guard for invalid voltages
+
+candas-agent perf/setpwm-single-limit d41eef5 (3PWM and 6PWM): u_max = min(voltage_limit, voltage_power_supply);
+if u_max > 0: dc = constrain(U, 0, u_max) * (1 / voltage_power_supply), else dc = 0 (one float compare more).
+
+Equivalence on a PC (tools/setpwm_equiv.py, float32 with the C semantics, duty = (uint32)(dc * (ARR+1))):
+- 2 million random cases (supply 1-60 V, limit 0.1-1.5 x supply, U from -5 to 70 V, a quarter exactly at the limit,
+  a quarter exactly at the supply): dc never above 1, never NaN; duty identical in 96 %, one timer count less or
+  more in 4 % (U * (1/Vps) vs U / Vps rounding), never more than one count (ARR+1 = 256 to 65536).
+- 4050 combinations of special values (-12345, -1, -0, 0, 1e-6 ... 1e6, +-inf, NaN for U, limit and supply):
+  246 differ by more than one count, all with voltage_power_supply <= 0: dev gave 100 % (U / 0 = inf -> 1, also
+  with both negative), now 0 %. No difference with a valid configuration. NaN only where dev was NaN too (U NaN,
+  or U and supply infinite).
+
+Loop time (cloud build run 44832025239, perf_run 2 rad/s, dev / branch alternated twice;
+data/2026-11-20/perf_setpwm.csv): dev 296.9 / 296.9 us, branch 287.9 / 287.9 us: -9.0 us (-3.0 %; -10.8 us without
+the guard). Flash -56 B, RAM same. Saturation (U >= supply) not run on the motor (needs full voltage): covered by
+the PC test only.
