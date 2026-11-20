@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Current filters after a pause: THE MOTOR MOVES. foc_current velocity mode at --speed for --run s, then motor
-disabled for --pause s, then enabled again with a 0 rad/s target while the recorder logs every loop (filtered iq =
-motor.current.q, enabled flag). Prints iq just before the pause and the first loops after enabling.
+Current filters after a pause: THE MOTOR MOVES (up to --speed). foc_current velocity mode, enabled at standstill,
+velocity step 0 -> --speed and the motor disabled --step-time s later, during the acceleration (filtered iq high,
+then frozen while disabled), pause --pause s, then enabled again with a 0 rad/s target. The recorder logs every
+loop (filtered iq = motor.current.q, enabled flag). Prints the frozen iq and the first loops after enabling.
 
 Expected with SimpleFOC dev: the current filters restart from the new value (no memory of the iq before the pause).
 
@@ -20,8 +21,9 @@ from board_mem import BoardMemory, RttPort  # noqa: E402
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--env", required=True)
+    p.add_argument("--elf", default=None, help="firmware ELF (default .pio/build/<env>/firmware.elf, e.g. a cloud build)")
     p.add_argument("--speed", type=float, default=2.0)
-    p.add_argument("--run", type=float, default=2.0)
+    p.add_argument("--step-time", type=float, default=0.06)
     p.add_argument("--pause", type=float, default=1.0)
     p.add_argument("--show", type=int, default=12, help="loops printed after enabling")
     p.add_argument("--label", default="")
@@ -29,10 +31,11 @@ def main():
     a = p.parse_args()
 
     def check(d):
-        if abs(d["velocity"]) > 20 or d["fault"] or max(abs(d["ia"]), abs(d["ib"])) > 3.5:
+        # phase currents only when enabled: with R_ds_on current sense the readings are meaningless when disabled
+        if abs(d["velocity"]) > 20 or d["fault"] or (d["enabled"] and max(abs(d["ia"]), abs(d["ib"])) > 3.5):
             raise RuntimeError(f"abort: {d}")
 
-    with BoardMemory(os.path.join(".pio", "build", a.env, "firmware.elf")) as mem:
+    with BoardMemory(a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")) as mem:
         port = RttPort(mem, timeout=0.1)
 
         def cmd(c, t=0.3):
@@ -45,20 +48,27 @@ def main():
 
         time.sleep(0.2)
         port.reset_input_buffer()
-        for c in ["ME0", "VO", "MLC2", "MT2", "MC1", "M0", "ST0", "MVP0.4", "MVI1", "MVF0.01", f"M{a.speed}"]:
+        for c in ["ME0", "VO", "MLC2", "MT2", "MC1", "M0", "ST0", "MVP0.4", "MVI1", "MVF0.01"]:
             cmd(c)
         try:
-            cmd("ME1", 0.0)
-            t0 = time.time()
-            while time.time() - t0 < a.run:
-                check(mem.read_dbg())
-            iq_before = mem.read_dbg()["iq"]
-            cmd("ME0", 0.0)
+            cmd("ME1", 0.5)
+            check(mem.read_dbg())
+            # 1st recording: velocity step, motor disabled during the acceleration
+            port.write(b"RN0\n")
+            time.sleep(0.02)
+            port.write(f"M{a.speed}\n".encode())
+            time.sleep(a.step_time)
+            port.write(b"ME0\n")
+            time.sleep(0.3)
+            check(mem.read_dbg())
+            rec1 = mem.read_recording()
             cmd("M0", a.pause)
-            # recorder every loop, then enable: both lines in one write, handled in successive loops
-            port.write(b"RN0\nME1\n")
+            # 2nd recording: started while disabled, then enabled (target 0)
+            port.write(b"RN0\n")
+            time.sleep(0.03)
+            port.write(b"ME1\n")
             t0 = time.time()
-            while time.time() - t0 < 0.5:
+            while time.time() - t0 < 0.4:
                 check(mem.read_dbg())
         finally:
             cmd("ME0", 0.4)
@@ -69,8 +79,10 @@ def main():
     if k is None:
         print("enable not recorded")
         return
+    iq_max = max((r["iq"] for r in rec1 if r["en"] > 0.5), key=abs, default=float("nan"))
     frozen = rec[k - 1]["iq"] if k > 0 else float("nan")
-    print(f"{a.label or a.env}: iq before the pause {iq_before:+.3f} A, iq while disabled {frozen:+.3f} A")
+    print(f"{a.label or a.env}: max iq during the step {iq_max:+.3f} A, iq frozen while disabled {frozen:+.3f} A "
+          f"({k} disabled loops recorded before enabling)")
     print("  loop  t[us]   iq[A]")
     rows = []
     for i, s in enumerate(rec[k:k + a.show]):

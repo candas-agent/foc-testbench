@@ -1044,3 +1044,40 @@ Re-measured after renaming the dt overloads to explicit `filter(x, dt)` / `compu
 79aee30; 176b773 only adds a comment): dev 297.1 us, branch 273.5 us (-23.6 us, -7.9 %), flash +160 B, RAM same.
 Same design as discussed in simplefoc#325 (yours, 2023: dekutree64 overload, runger "sample the clock once",
 Copper280z API compatible split); only the 4 current filters / PIDs of loopFOC, not the sensor / velocity ones.
+
+## 2026-11-20 - dt once: two behaviour changes found and fixed, first cloud builds
+
+Review of simplefoc#596 found two behaviour changes vs dev: (1) a fixed `Ts` set by the user on the current
+filters / PIDs was ignored, (2) the current filters were no longer reset after a pause (motor disabled, other torque
+mode), because loopFOC keeps running and its loop time stays normal. Fix (candas-agent perf/loopfoc-dt-once 413a9ed,
+on top of the user's branch: perf/loopfoc-dt-once-fix): dt = time since the previous foc_current step (loopFOC
+timestamp, new uint32 member), and `_isset(Ts) ? Ts : dt` for each object. Edge cases left: back to foc_current after
+< 0.3 s in another torque mode (one loop with the absence as dt), two loops in the same microsecond (impossible).
+
+Firmwares built in the cloud (GitHub Actions, workflow build.yml, run 44827114770: 3 envs in parallel in 1 min 42 s;
+local: 52 s / 62 s with the cache, 469 s for the new SimpleFOC commit). Cloud and local .bin differ only by 3 newlib
+assert path strings (linux-x64 / win32-x64), same code. Flashed with pyOCD, tools take --elf.
+
+Loop time (perf_run, 2 rad/s; data/2026-11-20/perf_dtfix.csv) and flash / RAM (PlatformIO, recorder now 24 B/sample):
+
+| firmware | loopFOC [us] | flash [B] | RAM [B] |
+|---|---|---|---|
+| dev | 297.3 | 89668 | 25752 |
+| dt once (#596 as opened) | 273.7 (-23.6) | 89828 (+160) | 25752 |
+| dt once + fix | 279.2 (-18.1, -6.1 %) | 89916 (+248) | 25756 (+4) |
+
+The fix costs 5.5 us (4 soft float `_isset(Ts)` compares + the timestamp), more than the 2-3 us expected.
+
+Re-enable test (tools/reenable_test.py: velocity step 0 -> 2 rad/s, motor disabled 60 ms later with a filtered iq
+of 0.6-1.1 A frozen, 1 s pause, enabled with target 0; recorder every loop; data/2026-11-20/reenable.csv). Filtered
+iq on the first loop after enabling, 3 runs each:
+
+| firmware | iq frozen [A] | first loop [A] | first loop / frozen |
+|---|---|---|---|
+| dev | 0.90 / 0.61 / 0.84 | +0.06 / +0.37 / -0.09 | 0.07 / 0.60 / -0.10 |
+| dt once (#596 as opened) | 0.84 / 0.88 / 1.05 | +0.48 / +0.45 / +0.59 | 0.57 / 0.51 / 0.56 |
+| dt once + fix | 0.81 / 1.09 / 0.58 | -0.15 / +0.06 / -0.10 | -0.18 / 0.05 / -0.17 |
+
+#596 as opened always restarts at about half the value from before the pause (then decays over a few loops); dev and
+the fix restart at the noise level (+-0.4 A at standstill: one dev run at 0.37 A). `Ts` priority: code review only
+(no bench command sets Ts).

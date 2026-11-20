@@ -25,6 +25,7 @@ from pc_sample import DEMCR, DWT_PCSR, demangle, functions  # noqa: E402
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--env", required=True)
+    p.add_argument("--elf", default=None, help="firmware ELF (default .pio/build/<env>/firmware.elf, e.g. a cloud build)")
     p.add_argument("--dt", default=None, help="dead-time compensation [V] (only on firmwares that have it)")
     p.add_argument("--speed", type=float, default=2.0)
     p.add_argument("--settle", type=float, default=3.0)
@@ -36,7 +37,7 @@ def main():
     a = p.parse_args()
     reads = []
     counts = collections.Counter()
-    with BoardMemory(os.path.join(".pio", "build", a.env, "firmware.elf")) as mem:
+    with BoardMemory(a.elf or os.path.join(".pio", "build", a.env, "firmware.elf")) as mem:
         port = RttPort(mem, timeout=0.1)
 
         def cmd(c, t=0.3):
@@ -71,8 +72,7 @@ def main():
                 if "TOTAL" in parts:
                     reads.append(parts)
             if a.pc:
-                funcs = functions(mem.elf_path if hasattr(mem, "elf_path") else
-                                  os.path.join(".pio", "build", a.env, "firmware.elf"))
+                funcs = functions(a.elf or os.path.join(".pio", "build", a.env, "firmware.elf"))
                 starts = [f[0] for f in funcs]
                 t = mem.target
                 t.write32(DEMCR, t.read32(DEMCR) | (1 << 24))
