@@ -2,7 +2,7 @@
 // ---------------------------------------------------------------------------
 // B-G431B-ESC1 (STM32G431, ST-Link V3 on board with virtual COM port)
 // ---------------------------------------------------------------------------
-#define BOARD_NAME          "B-G431B-ESC1"
+#define BENCH_BOARD_NAME          "B-G431B-ESC1"
 
 // Power stage
 #define SUPPLY_VOLTAGE      12.0f   // [V] set the REAL measured supply voltage, the compensation volts are scaled with it

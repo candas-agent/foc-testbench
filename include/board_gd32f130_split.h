@@ -4,7 +4,7 @@
 // Pins from Candas1/Split_Hoverboard_SimpleFOC include/defines_2-0.h
 // No ST-Link virtual COM port: commands and messages go through SEGGER RTT (pyOCD, tools --port rtt)
 // ---------------------------------------------------------------------------
-#define BOARD_NAME          "GD32F130 split board"
+#define BENCH_BOARD_NAME          "GD32F130 split board"
 
 // Power stage
 #define SUPPLY_VOLTAGE      26.0f   // [V] set the REAL measured supply voltage, the compensation volts are scaled with it

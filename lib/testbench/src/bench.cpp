@@ -1,4 +1,5 @@
 #include "bench.h"
+#include "profile.h"
 
 #ifdef BENCH_USE_RTT
 #include <RTTStream.h>
@@ -16,9 +17,20 @@ LowsideCurrentSense currentSense = LowsideCurrentSense(CS_SHUNT, CS_GAIN, CS_PIN
 Commander command = Commander(bench_io);
 MXLEMMINGObserverSensor observer = MXLEMMINGObserverSensor(motor);  // after motor: reads its KV and pole pairs
 #ifdef HALL_A_PIN
+#ifdef BENCH_HALL_TABLE_LOWER
+#include "hall_table.h"
+static HallSensorTs hall = HallSensorTs(HALL_A_PIN, HALL_B_PIN, HALL_C_PIN, POLE_PAIRS);
+#else
 static HallSensor hall = HallSensor(HALL_A_PIN, HALL_B_PIN, HALL_C_PIN, POLE_PAIRS);
+#endif
 // interpolates between the 6 hall states per electrical revolution (sets its own phase correction)
 static SmoothingSensor smooth = SmoothingSensor(hall, motor);
+#ifdef BENCH_HALL_TABLE_LOWER
+static HallTableSensor hall_table = HallTableSensor(hall, motor, (int8_t)SENSOR_DIRECTION);
+static const float hall_table_lower[8] = BENCH_HALL_TABLE_LOWER, hall_table_width[8] = BENCH_HALL_TABLE_WIDTH;
+static const float hall_ideal_lower[8] = BENCH_HALL_IDEAL_LOWER, hall_ideal_width[8] = BENCH_HALL_IDEAL_WIDTH;
+static int hall_mode = 0;  // 0 SmoothingSensor, 1 measured table, 2 ideal grid (same class as 1)
+#endif
 static void hallA() { hall.handleA(); }
 static void hallB() { hall.handleB(); }
 static void hallC() { hall.handleC(); }
@@ -43,8 +55,11 @@ static uint32_t last_rx_ms = 0;
 // ---------------------------------------------------------------------------
 // Dead-time compensation
 // ---------------------------------------------------------------------------
+// BENCH_NO_DEADTIME: plain SimpleFOC (master/dev) without the dead-time compensation API,
+// e.g. to measure a library change on its own. The D commands then only print/set the bench settings.
 void computeCompensation(float& ca, float& cb, float& cc) {
   ca = cb = cc = 0;
+#ifndef BENCH_NO_DEADTIME
   if (motor.deadtime_compensation <= 0 || motor.motor_status != FOCMotorStatus::motor_ready) return;
   if (motor.foc_modulation != FOCModulationType::SinePWM && motor.foc_modulation != FOCModulationType::SpaceVectorPWM) return;
   float r = (motor.torque_controller == TorqueControlType::voltage && _isset(motor.phase_resistance) && motor.phase_resistance > 0) ? motor.phase_resistance : 1.0f;
@@ -60,6 +75,7 @@ void computeCompensation(float& ca, float& cb, float& cc) {
   ca = _constrain(Ia * gain, -dc, dc);
   cb = _constrain(Ib * gain, -dc, dc);
   cc = _constrain(Ic * gain, -dc, dc);
+#endif
 }
 
 static bool isOpenLoop() {
@@ -72,7 +88,9 @@ static bool isOpenLoop() {
 static void updateVoltageLimit() {
   if (isOpenLoop() && motor.torque_controller == TorqueControlType::voltage) {
     float u = openloop_voltage;
+#ifndef BENCH_NO_DEADTIME
     if (equal_amplitude) u -= (4.0f / _PI) * motor.deadtime_compensation;
+#endif
     motor.updateVoltageLimit(u > 0 ? u : 0);
   } else {
     // updateVoltageLimit() and not voltage_limit = : the current PI limits must follow. SimpleFOC copies
@@ -83,6 +101,11 @@ static void updateVoltageLimit() {
 }
 
 float bench_calibrate(float max_current) {
+#ifdef BENCH_NO_DEADTIME
+  (void)max_current;
+  bench_io.println(F("No dead-time compensation in this build"));
+  return NOT_SET;
+#else
   if (max_current <= 0) max_current = CALIB_MAX_CURRENT;
   if (max_current > CALIB_MAX_CURRENT_LIMIT) max_current = CALIB_MAX_CURRENT_LIMIT;
   bench_io.print(F("Dead-time calibration, max current [A]: "));
@@ -102,6 +125,7 @@ float bench_calibrate(float max_current) {
     bench_io.println(F("Calibration failed"));
   }
   return udt;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -265,9 +289,11 @@ static void updateDebug() {
 static bool hasArg(const char* p) { return *p != '\0' && *p != '\n' && *p != '\r'; }
 
 static void printDeadtime() {
+#ifndef BENCH_NO_DEADTIME
   bench_io.print(F("comp [V]: "));       bench_io.println(motor.deadtime_compensation, 4);
   bench_io.print(F("threshold: "));      bench_io.println(motor.deadtime_comp_threshold, 4);
   bench_io.print(F("use measured: "));   bench_io.println(motor.deadtime_comp_use_measured);
+#endif
   bench_io.print(F("equal ampl.: "));    bench_io.println(equal_amplitude);
   bench_io.print(F("observer: "));       bench_io.println(observer_on);
   bench_io.print(F("openloop U [V]: ")); bench_io.println(openloop_voltage, 4);
@@ -279,6 +305,7 @@ static void doDeadtime(char* cmd) {
     case '\0': case '\n': case '\r':
       printDeadtime();
       break;
+#ifndef BENCH_NO_DEADTIME
     case 'T':  // threshold
       command.scalar(&motor.deadtime_comp_threshold, cmd + 1);
       break;
@@ -286,6 +313,7 @@ static void doDeadtime(char* cmd) {
       if (hasArg(cmd + 1)) motor.deadtime_comp_use_measured = atoi(cmd + 1) ? 1 : 0;
       bench_io.println(motor.deadtime_comp_use_measured);
       break;
+#endif
     case 'E':  // equal amplitude in open loop
       if (hasArg(cmd + 1)) equal_amplitude = atoi(cmd + 1) ? 1 : 0;
       bench_io.println(equal_amplitude);
@@ -301,7 +329,11 @@ static void doDeadtime(char* cmd) {
       bench_calibrate((float)atof(cmd + 1));
       break;
     default:   // compensation value
+#ifndef BENCH_NO_DEADTIME
       command.scalar(&motor.deadtime_compensation, cmd);
+#else
+      printDeadtime();
+#endif
       break;
   }
 }
@@ -328,6 +360,11 @@ static void printSensor() {
   bench_io.print(F("aligned: "));         bench_io.println(sensor_aligned);
   bench_io.print(F("zero el. angle: "));  bench_io.println(motor.zero_electric_angle, 4);
   bench_io.print(F("direction: "));       bench_io.println((int)motor.sensor_direction);
+#ifdef BENCH_HALL_TABLE_LOWER
+  bench_io.print(F("hall mode: "));       bench_io.println(hall_mode);
+  bench_io.print(F("velocity mode: "));   bench_io.println(hall_table.vel_mode);
+  bench_io.print(F("el. angle [deg]: ")); bench_io.println(motor.electricalAngle() * 180.0f / _PI, 1);
+#endif
 }
 
 // S: sensor state, SA: link the hall sensors and run the alignment (THE MOTOR MOVES, motor disabled after)
@@ -345,9 +382,60 @@ static void doSensor(char* cmd) {
     updateVoltageLimit();
     bench_io.println(ok ? F("Alignment done") : F("ALIGNMENT FAILED"));
   }
+#ifdef BENCH_HALL_TABLE_LOWER
+  // ST0 SmoothingSensor (known alignment), ST1 measured hall table, ST2 ideal 60 deg grid (rotor frame, CW, zero 0)
+  if (cmd[0] == 'V' && hasArg(cmd + 1)) hall_table.vel_mode = (uint8_t)atoi(cmd + 1);  // SV0..4 velocity estimate
+  if (cmd[0] == 'T' && hasArg(cmd + 1)) {
+    if (motor.enabled) { bench_io.println(F("Disable the motor first (ME0)")); return; }
+    int m = atoi(cmd + 1);
+    if (m >= 1 && m <= 4) {
+      // 1 measured table, 2 ideal grid; 3 / 4 kept as aliases of 2 / 1 (velocity estimate chosen with SV)
+      bool table = (m == 1 || m == 4);
+      hall_table.setTable(table ? hall_table_lower : hall_ideal_lower, table ? hall_table_width : hall_ideal_width);
+      hall_table.update();
+      motor.linkSensor(&hall_table);
+      motor.zero_electric_angle = 0;
+      motor.sensor_direction = Direction::CW;
+      hall_mode = m;
+    } else {
+      smooth.update();
+      motor.linkSensor(&smooth);
+      motor.zero_electric_angle = SENSOR_ZERO_ANGLE;
+      motor.sensor_direction = SENSOR_DIRECTION;
+      hall_mode = 0;
+    }
+  }
+#endif
   printSensor();
 }
 #endif
+
+#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+static float vbus_rt = 0;  // run time bus voltage [V], see readVbusRuntime()
+static uint32_t vbus_rt_reads = 0, vbus_rt_errors = 0, vbus_rt_last_ms = 0;
+#endif
+
+float friction_ff_a = 0;  // [A] friction feed-forward in velocity mode (XF command)
+// Velocity through a position ramp (V command): angle mode, target advanced by ramp_v * dt each loop, ramp_v also
+// given as velocity feed-forward. The angle loop catches up what is lost while the wheel sticks.
+static int8_t ramp_on = 0;
+static float ramp_v = 0;
+static uint32_t ramp_us = 0;
+static void doRamp(char* cmd) {
+  if (cmd[0] == 'O' || !hasArg(cmd)) {  // VO: stop, back to velocity mode at 0
+    ramp_on = 0;
+    motor.feed_forward_velocity = 0;
+    motor.target = 0;
+    motor.controller = MotionControlType::velocity;
+  } else {
+    ramp_v = (float)atof(cmd);
+    if (!ramp_on) motor.target = motor.shaft_angle;
+    motor.controller = MotionControlType::angle;
+    ramp_on = 1;
+    ramp_us = micros();
+  }
+  bench_io.print(F("ramp: ")); bench_io.print(ramp_on); bench_io.print(' '); bench_io.println(ramp_v, 3);
+}
 
 static void printSafety() {
   bench_io.print(F("timeout [s]: "));     bench_io.println(run_timeout_s);
@@ -355,6 +443,12 @@ static void printSafety() {
   bench_io.print(F("heartbeat: "));       bench_io.println(heartbeat_on);
   bench_io.print(F("last fault: "));      bench_io.println(fault);
   bench_io.print(F("Vbus at start-up [V]: ")); bench_io.println(dbg.vbus, 2);
+#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+  bench_io.print(F("Vbus run time [V]: ")); bench_io.print(vbus_rt, 2);
+  bench_io.print(F(" reads ")); bench_io.print(vbus_rt_reads);
+  bench_io.print(F(" errors ")); bench_io.println(vbus_rt_errors);
+#endif
+  bench_io.print(F("friction ff [A]: ")); bench_io.println(friction_ff_a, 3);
 }
 
 // bus voltage, measured once before the current sense takes the ADC
@@ -383,6 +477,13 @@ static void doSafety(char* cmd) {
     case 'I': if (hasArg(cmd + 1)) overcurrent_a = (float)atof(cmd + 1); break;
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
+    case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+#ifdef BENCH_PROFILE
+    case 'P': prof_print(bench_io); return;   // XP: loop profile
+#ifdef BENCH_MICROBENCH
+    case 'B': prof_bench(bench_io); return;   // XB: micro benchmarks (motor disabled)
+#endif
+#endif
     default: break;
   }
   printSafety();
@@ -412,7 +513,7 @@ void bench_setup() {
 #endif
   SimpleFOCDebug::enable(&bench_io);
   _delay(1000);
-  bench_io.println(F("FOC test bench, board: " BOARD_NAME));
+  bench_io.println(F("FOC test bench, board: " BENCH_BOARD_NAME));
   measureVbus();
 
   // no position sensor linked: open loop only
@@ -447,14 +548,23 @@ void bench_setup() {
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
   motor.torque_controller = TorqueControlType::voltage;
   motor.controller = MotionControlType::velocity_openloop;
+#ifdef MOTION_DOWNSAMPLE
+  // move() (angle/velocity reading, outer loops) only every MOTION_DOWNSAMPLE+1 loopFOC
+  motor.motion_downsample = MOTION_DOWNSAMPLE;
+#endif
   motor.LPF_current_q.Tf = CURRENT_LPF_TF;
   motor.LPF_current_d.Tf = CURRENT_LPF_TF;
 
+#ifndef BENCH_NO_DEADTIME
   motor.deadtime_compensation = DEADTIME_COMP;
   motor.deadtime_comp_threshold = DEADTIME_THRESHOLD;
   motor.deadtime_comp_use_measured = 0;
+#endif
 
   dbg.magic = DBG_MAGIC;
+#ifdef BENCH_PROFILE
+  prof_init();
+#endif
   // observer in parallel (not linked): no alignment needed, angle of the flux = rotor d axis
   observer.init();
 #ifdef HALL_A_PIN
@@ -490,30 +600,84 @@ void bench_setup() {
   command.add('P', doPing, "ping");
 #ifdef HALL_A_PIN
   command.add('S', doSensor, "sensor");
+  command.add('V', doRamp, "velocity by position ramp");
 #endif
   command.verbose = VerboseMode::user_friendly;
   last_rx_ms = millis();
 }
 
-void bench_step() {
+// the profiled loop is bench_loop, bench_step alone (pio tests) is not profiled
+static void bench_step_impl(bool profiled);
+void bench_step() { bench_step_impl(false); }
+
+static void bench_step_impl(bool profiled) {
+#ifdef BENCH_PROFILE
+  uint32_t _pt = prof_cycles();
+#define LAP(part) do { if (profiled) { uint32_t _n = prof_cycles(); prof_add(part, _n - _pt); _pt = _n; } } while (0)
+#else
+#define LAP(part)
+#endif
   updateVoltageLimit();
   // observer before loopFOC: it integrates the voltage applied during the last period (motor.Ualpha/Ubeta)
   if (observer_on) observer.update();
+  LAP(P_OBS);
 #ifdef HALL_A_PIN
   if (!sensor_aligned) hall.update();  // not linked to the motor yet: update it here for the S command and dbg
 #endif
 #ifdef TORQUE_TARGET_MAX
   if (motor.controller == MotionControlType::torque) motor.target = _constrain(motor.target, -TORQUE_TARGET_MAX, TORQUE_TARGET_MAX);
 #endif
+  // friction feed-forward in velocity mode: friction_ff_a with the sign of the velocity target (linear below
+  // 0.5 rad/s so that it goes smoothly to 0 at standstill); the velocity PI only handles what is left
+  if (ramp_on) {
+    uint32_t now = micros();
+    if (motor.enabled) {
+      motor.target += ramp_v * (now - ramp_us) * 1e-6f;
+      motor.feed_forward_velocity = ramp_v;
+    } else {
+      motor.target = motor.shaft_angle;  // keep in step while disabled: no jump when enabled again
+    }
+    ramp_us = now;
+  }
+  motor.feed_forward_current.q = (motor.controller == MotionControlType::velocity)
+      ? friction_ff_a * _constrain(motor.target / 0.5f, -1.0f, 1.0f) : 0.0f;
   motor.loopFOC();
+  LAP(P_FOC);
   motor.move();
+  LAP(P_MOVE);
   updateDebug();
+  LAP(P_DBG);
   safety();
+  LAP(P_SAFETY);
   rec_update();
+  LAP(P_REC);
+#undef LAP
 }
 
+#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+// Run time bus voltage through SimpleFOC's regular conversion on the current sense ADC (STM32, SimpleFOC dev)
+float _readRegularADCVoltage(const int pin);
+static void readVbusRuntime() {
+  if (millis() - vbus_rt_last_ms < 20) return;
+  vbus_rt_last_ms = millis();
+  float v = _readRegularADCVoltage(BENCH_VBUS_RUNTIME_PIN);
+  vbus_rt_reads++;
+  if (v < 0) vbus_rt_errors++;
+  else vbus_rt = v * BENCH_VBUS_RUNTIME_GAIN;
+}
+#endif
+
 void bench_loop() {
-  bench_step();
+  PROF_T0();
+  bench_step_impl(true);
+#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+  readVbusRuntime();
+#endif
+#ifdef BENCH_PROFILE
+  _pt = prof_cycles();
+#endif
   if (bench_io.available()) last_rx_ms = millis();
   command.run();
+  PROF_LAP(P_CMD);
+  PROF_TOTAL();
 }

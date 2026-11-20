@@ -1,0 +1,7 @@
+{
+  "name": "testbench",
+  "description": "FOC test bench core. Not archived: fastmath.cpp replaces weak SimpleFOC functions, an archived object would only be linked by luck of the archive order.",
+  "build": {
+    "libArchive": false
+  }
+}

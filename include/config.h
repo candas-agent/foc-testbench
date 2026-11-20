@@ -6,6 +6,8 @@
 // Board: power stage, pins, current sense, communication, recorder size (selected by the PlatformIO env)
 #if defined(BOARD_GD32F130_SPLIT)
 #include "board_gd32f130_split.h"
+#elif defined(BOARD_STM32F103_SPLIT)
+#include "board_stm32f103_split.h"
 #else
 #include "board_esc1.h"
 #endif
