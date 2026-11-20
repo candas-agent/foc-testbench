@@ -753,3 +753,27 @@ read stall; the safety did its job. So 1 pass for 0 and 0.02 A, 2 passes for the
 - A longer velocity filter (30 ms) is worse, as at 2 rad/s.
 - To do: even softer (P 0.1-0.2, I 0.1-0.3), and check these gains at 2 and 5 rad/s (they may be too soft there:
   gain scheduling by speed if so).
+
+### Soft PI at 2 and 5 rad/s, and softer at +-1 rad/s (combo_f103, compensation 0.38 V)
+
+At 2 and 5 rad/s (data/2026-11-20/combo_f103_pi_2_5.csv, 3 passes) P 0.2 I 0.3 is as good or slightly better:
+
+| PI | 2: stalls / cv / iq sd / true | -2: stalls / cv / iq sd / true | 5: cv / iq sd / true |
+|---|---|---|---|
+| 0.4 / 1 / 0.01 | 0 / 25 % / 0.18 / 1.98 | 0 / 25 % / 0.18 / 1.98 | 40 % / 0.16 / 5.00 |
+| 0.2 / 0.3 / 0.01 | 0 / 23 % / 0.15 / 1.99 | 0 / 22 % / 0.15 / 1.99 | 39 % / 0.15 / 4.98 |
+
+Softer at +-1 rad/s (data/2026-11-20/combo_f103_pi_soft.csv, 3 passes):
+
+| PI | +1: stalls / cv / true | -1: stalls / cv / true |
+|---|---|---|
+| 0.2 / 0.3 / 0.01 (repeat) | 6.0 (3-8) / 63 % / 0.95 | 7.3 (5-9) / 72 % / 0.95 |
+| 0.1 / 0.3 / 0.01 | 8.0 (7-9) / 87 % / 0.96 | 5.0 (2-10) / 64 % / 0.97 |
+| 0.2 / 0.1 / 0.01 | 8.3 (6-10) / 69 % / 0.88 | 10.3 (7-12) / 78 % / 0.87 |
+| 0.1 / 0.1 / 0.01 | 5.3 (2-8) / 73 % / 0.92 | 6.7 (5-8) / 86 % / 0.92 |
+
+- The repeat of 0.2 / 0.3 is clearly worse than its first run (stalls 1.7 -> 6.0 forward, 4.7 -> 7.3 backward):
+  large run-to-run variance at 1 rad/s. Over the 6 passes: 3.9 forward / 6.0 backward vs 11 / 7.7 for 0.4 / 1, so
+  a real gain forward, small backward. The real speed gain is robust (0.95-0.97 vs 0.85).
+- Softer than P 0.2 I 0.3 brings nothing; I 0.1 brings the speed error back (0.88-0.92).
+- **Keep P 0.2, I 0.3, Tf 0.01** for this board: better from 1 to 5 rad/s, no need for speed-dependent gains.
