@@ -70,8 +70,12 @@ def main():
     if a.configs:
         CONFIGS = [c for c in CONFIGS if any(c[0].startswith(x) for x in a.configs.split(","))]
     if a.dt:
-        dt_th = [f"DT{a.dt_threshold}"] if a.dt_threshold else []
-        CONFIGS = [(f"C0 dt {v}", ["ST0", "DM0", f"D{v}"] + dt_th, False) for v in a.dt.split(",")]
+        # entry "<volts>" or "<volts>@<threshold A>"; the threshold is set for every configuration (it persists)
+        CONFIGS = []
+        for e in a.dt.split(","):
+            v, _, th = e.partition("@")
+            th = th or str(a.dt_threshold if a.dt_threshold else 0.2)
+            CONFIGS.append((f"C0 dt {v} th {th}", ["ST0", "DM0", f"D{v}", f"DT{th}"], False))
     rows = []
     with BoardMemory(elf) as mem:
         port = RttPort(mem, timeout=0.1)

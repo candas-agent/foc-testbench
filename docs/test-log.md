@@ -713,3 +713,24 @@ Nominal sector time 70 ms at 1 rad/s, 140 ms at 0.5 rad/s (stall = interval > 3x
 - Ideas, not tried: lower compensation threshold (iq is small at these speeds, the ramp may only apply part of the
   compensation), lower velocity PI gains or a longer velocity filter below 2 rad/s, velocity estimate from the
   SmoothingSensor angle over a fixed window.
+
+### Compensation threshold sweep at +-1 rad/s (combo_f103)
+
+`--dt 0,0.38@0.2,0.38@0.1,0.38@0.05,0.38@0.02 --targets 1:15,-1:15` (an entry `<volts>@<threshold>` now sets DT for
+each configuration), data/2026-11-20/combo_f103_th_sweep.csv. **Stopped during pass 2 by the firmware run timeout**
+(fault 1, 30 s since ME1, phase currents 0.2 A): a 15 s run lasted more than 30 s on the PC side, most likely a pyOCD
+read stall; the safety did its job. So 1 pass for 0 and 0.02 A, 2 passes for the others (mean, min-max):
+
+| threshold | +1: stalls / cv / iq sd | -1: stalls / cv / iq sd |
+|---|---|---|
+| comp 0 | 12 / 88 % / 0.26 | 19 / 95 % / 0.27 |
+| 0.2 A | 11.5 (11-12) / 86 % / 0.27 | 8.5 (8-9) / 78 % / 0.24 |
+| 0.1 A | 9.0 (9-9) / 81 % / 0.27 | 8.0 (8-8) / 78 % / 0.25 |
+| 0.05 A | 15.5 (15-16) / 87 % / 0.28 | 5.0 / 75 % / 0.24 |
+| 0.02 A | 12 / 89 % / 0.29 | 10 / 82 % / 0.26 |
+
+- No threshold fixes 1 rad/s: stalls 5-16 for all values, no trend, cv 75-89 %; real speed 0.85-0.88 everywhere.
+  The partial compensation at low iq is not the cause. Backward the compensation helps somewhat (19 -> 5-10 stalls),
+  forward not at all.
+- Next suspects: the velocity loop on a sector-quantised estimate (sd ~0.6-0.7 rad/s at 1 rad/s) -> softer PI or a
+  longer velocity filter below 2 rad/s, or a velocity estimate over a fixed window from the SmoothingSensor angle.
