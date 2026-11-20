@@ -12,6 +12,20 @@
 #include "encoders/MXLEMMING_observer/MXLEMMINGObserverSensor.h"
 #ifdef HALL_A_PIN
 #include "encoders/smoothing/SmoothingSensor.h"
+// hall edge log (bench.cpp hallLog): 8 bytes per edge, 1024 edges (8 KB) on the F103 (48 KB RAM). Off on the
+// GD32F130 (8 KB RAM, ~97 % used with even 128 edges): define HALL_EDGE_N to enable it on another board.
+// The PC must read faster than the buffer fills (1024 edges = 3.6 s at 20 rad/s).
+#if !defined(HALL_EDGE_N) && defined(BOARD_STM32F103_SPLIT)
+#define HALL_EDGE_N 1024
+#endif
+#ifdef HALL_EDGE_N
+struct HallEdge {
+  uint32_t t_us;                 // micros() in the hall interrupt
+  int32_t count;                 // hall sectors since boot after the edge (electric_rotations*6 + sector)
+};
+extern "C" HallEdge hall_edges[HALL_EDGE_N];
+extern "C" volatile uint32_t hall_edge_n;
+#endif
 #endif
 
 extern BLDCMotor motor;

@@ -31,9 +31,30 @@ static const float hall_table_lower[8] = BENCH_HALL_TABLE_LOWER, hall_table_widt
 static const float hall_ideal_lower[8] = BENCH_HALL_IDEAL_LOWER, hall_ideal_width[8] = BENCH_HALL_IDEAL_WIDTH;
 static int hall_mode = 0;  // 0 SmoothingSensor, 1 measured table, 2 ideal grid (same class as 1)
 #endif
-static void hallA() { hall.handleA(); }
-static void hallB() { hall.handleB(); }
-static void hallC() { hall.handleC(); }
+// Hall edge log: every sector change timestamped in the interrupt (micros()), read by pyOCD (tools/board_mem.py
+// read_hall_edges). Exact edge times, independent of how fast the PC polls dbg (~370 reads/s through the ST-Link).
+// Ring buffer: entry k is in hall_edges[k % HALL_EDGE_N], hall_edge_n counts all edges since boot.
+#ifdef HALL_EDGE_N
+extern "C" {
+HallEdge hall_edges[HALL_EDGE_N];
+volatile uint32_t hall_edge_n = 0;
+}
+static void hallLog() {
+  static int32_t last = 0x7FFFFFFF;
+  int32_t c = (int32_t)(hall.electric_rotations * 6 + hall.electric_sector);
+  if (c == last) return;              // glitch: interrupt without a sector change
+  last = c;
+  uint32_t n = hall_edge_n;
+  hall_edges[n % HALL_EDGE_N].t_us = micros();
+  hall_edges[n % HALL_EDGE_N].count = c;
+  hall_edge_n = n + 1;                // published last: the PC never reads a half written entry as new
+}
+#else
+static inline void hallLog() {}
+#endif
+static void hallA() { hall.handleA(); hallLog(); }
+static void hallB() { hall.handleB(); hallLog(); }
+static void hallC() { hall.handleC(); hallLog(); }
 #endif
 int sensor_aligned = 0;
 

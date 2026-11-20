@@ -43,13 +43,16 @@ class BoardMemory:
 
     def __init__(self, elf_path, probe_id=None, frequency=4_000_000):
         # _SEGGER_RTT: RTT control block, only in the firmware built with BENCH_USE_RTT (GD32 board)
-        self.sym = elf_symbols(elf_path, ["dbg", "rec_buf", "rec_n", "rec_running"], optional=["_SEGGER_RTT"])
+        self.sym = elf_symbols(elf_path, ["dbg", "rec_buf", "rec_n", "rec_running"], optional=["_SEGGER_RTT", "hall_edges", "hall_edge_n"])
         expected = struct.calcsize(DBG_FORMAT)
         if self.sym["dbg"][1] != expected:
             raise RuntimeError(f"dbg size in the ELF is {self.sym['dbg'][1]} bytes, expected {expected}: "
                                "update DBG_FORMAT/DBG_FIELDS in board_mem.py")
         # recorder size from the ELF (RECORD_SAMPLES depends on the board)
         self.rec_capacity = self.sym["rec_buf"][1] // struct.calcsize(SAMPLE_FORMAT)
+        # hall edge log (firmware with hall sensors): ring buffer size from the ELF
+        self.hall_edge_capacity = self.sym["hall_edges"][1] // 8 if "hall_edges" in self.sym else 0
+        self.hall_edge_next = None   # index of the next edge to read (None: start from the current one)
         self.probe_id = probe_id
         self.frequency = frequency
         self.session = None
@@ -87,6 +90,33 @@ class BoardMemory:
     def read_u32(self, name):
         addr, _ = self.sym[name]
         return struct.unpack("<i", self._read(addr, 4))[0]
+
+    def read_hall_edges(self, from_start=False):
+        """New hall edges since the last call, as a list of (t_us, count): t_us = board micros() in the interrupt
+        (wraps after 71 min), count = hall sectors since boot (+1 / -1 per edge gives the direction).
+        The first call only sets the starting point (returns []) unless from_start. Raises if the ring buffer
+        overflowed between two calls (edges lost: read more often)."""
+        if not self.hall_edge_capacity:
+            raise RuntimeError("no hall_edges in the ELF (firmware without hall sensors or too old)")
+        n = struct.unpack("<I", self._read(self.sym["hall_edge_n"][0], 4))[0]
+        cap = self.hall_edge_capacity
+        if self.hall_edge_next is None:
+            self.hall_edge_next = max(0, n - cap) if from_start else n
+        start = self.hall_edge_next
+        if n - start > cap:
+            raise RuntimeError(f"hall edge buffer overflow: {n - start - cap} edges lost")
+        if n == start:
+            return []
+        addr = self.sym["hall_edges"][0]
+        a, b = start % cap, n % cap
+        if a < b:
+            raw = self._read(addr + 8 * a, 8 * (b - a))
+        else:  # wraps around the end of the buffer
+            raw = self._read(addr + 8 * a, 8 * (cap - a)) + (self._read(addr, 8 * b) if b else b"")
+        self.hall_edge_next = n
+        # the newest entry may be written while we read: the firmware publishes hall_edge_n after the entry,
+        # so entries below the n we read are complete
+        return [struct.unpack_from("<Ii", raw, 8 * k) for k in range(n - start)]
 
     def recording_done(self):
         return self.read_u32("rec_running") == 0 and self.read_u32("rec_n") > 0

@@ -895,3 +895,71 @@ Stall map with this shift (data/2026-11-20/stall_map_shift_edges.csv), mean sect
   sample sd ~0.18 A), which drift and are not separable from other 1x effects with the bench data alone. An
   independent current reference is needed to go further (scope + current probe on one phase), or a board with real
   shunts. Speeds >= 2 rad/s are fine with compensation + hall decay + soft PI.
+
+## 2026-11-20 - time traces at 2 rad/s (figures)
+
+tools/trace_run.py (one 12 s run, every dbg read logged), tools/plot_trace.py -> docs/figures/f103_trace_2rads.png;
+tools/plot_ab.py -> docs/figures/f103_ab_2rads.png (bars from dt_f103_ab.csv / combo_f103_ab.csv).
+Velocity PI 0.4/1/0.01, D 0.38 V, threshold 0.2 A. Firmware dt_f103 for dev / compensation, combo_f103 for hall
+velocity / both (combo_f103 flashed back afterwards). Data: data/2026-11-20/trace_{dev,dt,hallvel,both}.csv.
+
+| setup | stalls in 8 s | iq sd |
+|---|---|---|
+| dev | 19 | 0.44 A |
+| + compensation | 5 | 0.34 A |
+| + hall velocity decay | 9 | 0.30 A |
+| both | 0 | 0.17 A |
+
+Same picture as the A/B campaign. The real speed (hall edges) shows it best: dev alternates ~0.6 rad/s sectors
+and ~4.5 rad/s catch-ups once per electrical period; both stays at 1.5-2.5 rad/s. iq shows a 1x electrical
+oscillation (~0 to 1.2 A) without the corrections, flat noise with both.
+
+## 2026-11-20 - hall edge log in firmware (not tested on the board yet)
+
+The PC reads dbg ~370 times/s through the ST-Link (USB round trips), so hall edge times seen by the PC are off by
+up to ~2.7 ms (~8 % of a sector at 2 rad/s): spikes on the speed traces. Now every sector change is timestamped in
+the hall interrupt (micros()) into a ring buffer `hall_edges[1024]` / `hall_edge_n` (8 KB, F103 only: the GD32F130
+has 8 KB of RAM). `BoardMemory.read_hall_edges()` returns the new edges (overflow detected), trace_run.py saves them
+to `<out>_edges.csv` and plot_trace.py uses them when present. Reader tested offline (wrap, overflow, micros wrap).
+Loop cost size check (same flags, symbol sizes): compensation +0.5 KB flash always (setPhaseVoltage +380 B,
+loopFOC +100 B), +0.9 KB calibrateDeadtimeCompensation if called, +20 B RAM per motor; hall decay +16 B flash,
++4 B RAM. Loop time: tools/perf_run.py (XP at 2 rad/s), envs perf_dev_f103 / perf_hall_f103, not run yet.
+
+### Edge log validated on the board (combo_f103, D 0.38, 2 rad/s, 12 s)
+337 edges logged, all consecutive (no loss, no glitch). The hall count runs opposite to the motor (SENSOR_DIRECTION
+-1): plot_trace.py orients it with the sign of the velocity estimate. Same run, speed per sector:
+PC polling mean 2.19 sd 0.80 max 4.48 rad/s; firmware log mean 2.07 sd 0.44 max 3.05 rad/s. The spikes were polling
+artefacts; what remains is a clean pattern repeating every electrical period (6 sectors, ~0.21 s): partly real
+1x electrical torque ripple, partly the unequal hall sector widths (to be separated with the hall calibration).
+Figure docs/figures/f103_edge_log_check.png. ST-Link read timing (motor off): 1.35 ms for 4 bytes, 2.3 ms for
+88 bytes, 12 ms for 1 KB, ceiling ~90 KB/s; mostly USB waiting, ~20 % pyOCD Python.
+Per sector position (count mod 6, 46 visits each): mean time 28 / 28 / 31 / 35 / 42 / 49 ms with only 1-3 ms sd:
+the pattern is locked to the electrical position and very repeatable. The hall sector widths (calibration:
+54-67 deg el) explain at most +-12 % and do not match it (the 67 deg sector is one of the fastest): the remaining
++-40 % is a real 1x electrical speed ripple, the same signature as the current sense offset ripple seen earlier.
+
+## 2026-11-20 - loop cost of the two PRs (STM32F103, 72 MHz, no FPU)
+
+tools/perf_run.py: 2 rad/s velocity mode, foc_current, 10 XP reads of 256 loops each, same bench code and flags
+for all firmwares (perf_dev_f103 = dev ae7b3ad, perf_hall_f103 = dev + b691018, dt_f103 = dev + d0f4aa3,
+combo_f103 = both). Data data/2026-11-20/perf.csv. Mean loopFOC / move [us]:
+
+| firmware | loopFOC | move |
+|---|---|---|
+| dev | 297.0 | 81.3 |
+| + hall velocity decay | 297.4 | 84.9 |
+| + compensation, D 0 | 299.9 | 80.5 |
+| + compensation, D 0.38 | 331.1 | 84.3 |
+| both, D 0 (x2) | 300.1 / 301.3 | 85.2 / 85.2 |
+| both, D 0.38 (x2) | 330.8 / 331.5 | 84.9 / 85.1 |
+
+- Compensation active: **+31 us in loopFOC** (+10 %, ~2200 cycles: soft float on the M3), repeatable to 1 us.
+  Code present but D 0: +3 us. On a whole bench loop of ~431 us that is +7 % (2.3 -> 2.15 kHz).
+- Hall velocity decay: not measurable (move varies 80-85 us between runs of the same firmware; getVelocity +8 B).
+- The bench "debug" part also grows +39 us with compensation on: bench code recomputing the compensation for dbg,
+  not library cost (excluded above).
+
+### Time traces of the 4 setups with the edge log (2 rad/s, 12 s each)
+Same settings as the polled traces; docs/figures/f103_trace_2rads_edgelog.png, data tracelog_{dev,dt,hallvel,both}*.csv.
+The curves are now clean: dev and hall velocity alone show a 1x electrical cycle (one ~0.6 rad/s sector, then a
+~4 rad/s catch-up), the compensation halves it, both keep 1.5-2.7 rad/s. iq sd 0.43 / 0.26 / 0.31 / 0.16 A.
