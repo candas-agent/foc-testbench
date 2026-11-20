@@ -54,6 +54,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--env", default="smooth_f103_dev")
     p.add_argument("--csv", default=None)
+    p.add_argument("--edges", default=None, help="CSV of every hall edge (time, sign, hall state, hall_count) for tools/stall_map.py")
     p.add_argument("--passes", type=int, default=3)
     p.add_argument("--configs", default=None, help="comma separated name prefixes to run, e.g. C0,V1")
     p.add_argument("--dt", default=None,
@@ -88,6 +89,7 @@ def main():
             CONFIGS.append((f"{base_name} PI {kp}/{ki}/{tf} XF {xf}",
                             base_setup + [f"MVP{kp}", f"MVI{ki}", f"MVF{tf}", f"XF{xf}"], False))
     rows = []
+    all_edges = []
     with BoardMemory(elf) as mem:
         port = RttPort(mem, timeout=0.1)
 
@@ -99,7 +101,10 @@ def main():
                 time.sleep(0.02)
             return out
 
+        edge_log = []
+
         def run(target, dur):
+            edge_log.clear()
             t0 = time.time()
             v, iq, edges, last_h = [], [], [], None
             while time.time() - t0 < dur:
@@ -114,6 +119,7 @@ def main():
                     if last_h is not None and h != last_h:
                         sign = 1 if FWD_NEXT.get(last_h) == h else (-1 if FWD_NEXT.get(h) == last_h else 0)
                         edges.append((now, sign))
+                        edge_log.append((now - t0, sign, h, d.get("hall_count", 0)))
                 last_h = d["hall"]
             tot = sum(sg for _, sg in edges)
             want = (1 if tot > 0 else -1) if tot else (1 if target > 0 else -1)  # motion direction from the edges themselves
@@ -160,6 +166,7 @@ def main():
                         cmd("ME0", 0.4)
                         cmd("VO")
                         r.update(config=name, target=tgt, pas=pas + 1)
+                        all_edges.extend((name, tgt, pas + 1) + e for e in edge_log)
                         rows.append(r)
                         print(f"pass {pas + 1} {name:24s} {tgt:+.0f}: net {r['net']:4d}/{r['expected_edges']:4.0f} "
                               f"true v {r['true_v']:+.2f} back {r['back']:3d} rev {r['rev']:3d} bad {r['bad']} | "
@@ -180,6 +187,11 @@ def main():
             cmd("MAP20")
             print("X ->", cmd("X", 0.8).strip().replace("\n", " | "))
 
+    if a.edges and all_edges:
+        with open(a.edges, "w") as f:
+            f.write("config,target,pas,t,sign,hall,hall_count\n")
+            for e in all_edges:
+                f.write(",".join(str(x) for x in e) + "\n")
     if a.csv and rows:
         keys = ["pas", "config", "target", "edges", "net", "back", "rev", "bad", "true_v", "expected_edges", "cv", "stalls",
                 "max_ms", "iq_sd", "vel_mean", "vel_sd"]

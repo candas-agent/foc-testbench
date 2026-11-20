@@ -277,9 +277,11 @@ static void updateDebug() {
   dbg.hall = (uint32_t)hall.hall_state;
   // sensor electrical angle (with the alignment), also in open loop where motor.electrical_angle is the open loop angle
   dbg.sensor_angle = sensor_aligned ? motor.electricalAngle() : 0;
+  dbg.hall_count = (int32_t)(hall.electric_rotations * 6 + hall.electric_sector);
 #else
   dbg.hall = 0;
   dbg.sensor_angle = 0;
+  dbg.hall_count = 0;
 #endif
 }
 

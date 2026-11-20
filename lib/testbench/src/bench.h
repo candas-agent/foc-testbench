@@ -25,7 +25,7 @@ extern MXLEMMINGObserverSensor observer;
 
 // Variables read with pyOCD (global, volatile so they are never optimised away)
 // The layout is mirrored in tools/board_mem.py: update both together (DBG_MAGIC checks the version).
-#define DBG_MAGIC 0xF0CDB004u
+#define DBG_MAGIC 0xF0CDB005u
 struct DebugVars {
   uint32_t magic;                // DBG_MAGIC
   float ia, ib, ic;              // measured phase currents [A]
@@ -42,6 +42,7 @@ struct DebugVars {
   float vbus;                    // bus voltage measured at start-up [V], NAN if the board has no measurement
   uint32_t hall;                 // hall sensor state (0..7), 0 if the board has no hall sensors
   float sensor_angle;            // electrical angle from the sensor (0 if none) [rad]
+  int32_t hall_count;            // hall sectors counted since boot (electric_rotations*6 + sector): position mod 6*pp
 };
 extern volatile DebugVars dbg;
 

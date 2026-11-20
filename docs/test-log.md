@@ -794,3 +794,31 @@ Softer at +-1 rad/s (data/2026-11-20/combo_f103_pi_soft.csv, 3 passes):
   run-to-run spread; 0.3 A slightly worse. Same conclusion as this morning: a constant friction torque is not what
   makes the wheel stall. Probably position dependent (cogging, a tight spot): to check by mapping the stalls on
   the hall-counted angle.
+
+### Where do the stalls happen? Stalls mapped on the hall-counted position (combo_f103)
+
+No absolute encoder: firmware dbg gets `hall_count` (electric_rotations*6 + sector since boot, DBG_MAGIC 0xF0CDB005),
+position = hall_count mod 90 (one turn), valid while the board stays powered. `lowspeed_campaign.py --edges` logs every
+hall edge, `tools/stall_map.py` (per mechanical position) and `tools/stall_sectors.py` (per electrical sector) analyse
+it. Comp 0.38 V, PI 0.2 / 0.3 / 0.01, +-1 rad/s 22 s x 4 passes = 12 turns per direction, no fault
+(data/2026-11-20/stall_map_edges.csv, stall_map_runs.csv).
+
+- The slow positions repeat from turn to turn (correlation first / second half of the visits +0.82 forward, +0.75
+  backward), 75 % / 58 % of the stalls in the 10 % slowest positions.
+- **But they are electrical, not mechanical**: forward, the 10 slowest positions are all = 2 mod 6, i.e. the same
+  hall sector in every electrical period. Per electrical sector (mean time / nominal, stalls):
+
+| hall state | 1 | 5 | 4 | 6 | 2 | 3 |
+|---|---|---|---|---|---|---|
+| forward | 0.64 / 0 | 1.21 / 7 | **2.27 / 47** | 0.85 / 1 | 0.68 / 1 | 0.63 / 0 |
+| backward | 0.88 / 0 | 0.82 / 1 | 0.78 / 0 | 0.68 / 0 | 1.37 / 17 | **1.75 / 30** |
+
+- Per electrical period (15 per turn) the mean time only varies 0.89-1.31: the mechanical position (tight spot,
+  friction) plays a minor role. 84 % (forward) and 98 % (backward) of the stalls are in 1-2 sectors out of 6.
+- The sector widths are normal there (state 4: 57.5°, states 2/3: 64.0 / 56.6°), so it is not the hall geometry.
+  A torque dip at a fixed electrical angle, i.e. a 1x electrical frequency disturbance: typical of a current sense
+  offset error (R_ds_on sensing, offsets measured once at start-up), or one phase weaker (driver / MOSFET / dead time
+  per phase). Cogging would repeat per slot, not once per electrical period.
+- Offsets could not be checked at rest: with the driver disabled the R_ds_on sense reads ~-11 A (MOSFETs off).
+- Next: same mapping in voltage torque mode (no current sense in the loop) and/or with the motor enabled at zero
+  current to read the offsets; if the dip moves or disappears, it is the current sense.
