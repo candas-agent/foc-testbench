@@ -501,7 +501,19 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
-    case 'O': trimOffsets(); return;  // XO: re-centre the current offsets (open loop, 0 V, enabled)
+    case 'O':  // XO: re-centre the offsets (open loop, 0 V, enabled); XO<da>,<db>: shift the measured ia, ib by da, db [A]
+      if (hasArg(cmd + 1)) {
+        float da = (float)atof(cmd + 1);
+        const char* c2 = strchr(cmd + 1, ',');
+        float db = c2 ? (float)atof(c2 + 1) : 0.0f;
+        currentSense.offset_ia -= da / currentSense.gain_a;  // i = (v - offset) * gain
+        currentSense.offset_ib -= db / currentSense.gain_b;
+        bench_io.print(F("measured currents shifted [A]: a ")); bench_io.print(da, 4);
+        bench_io.print(F(" b ")); bench_io.println(db, 4);
+      } else {
+        trimOffsets();
+      }
+      return;
 #ifdef BENCH_PROFILE
     case 'P': prof_print(bench_io); return;   // XP: loop profile
 #ifdef BENCH_MICROBENCH

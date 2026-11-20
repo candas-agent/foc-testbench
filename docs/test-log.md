@@ -857,3 +857,20 @@ data/2026-11-20/stall_map_trim_edges.csv):
 - DC link current (right motor shunt on PC1, EFeru defines.h, not read by the bench yet): at low speed its mean is
   only power / Vbus (~10-70 mA), and with the SimpleFOC sampling at the PWM centre (zero vector) it is 0 at the
   sampling instant, so it cannot be compared to a phase current without a dedicated sampling instant.
+
+### Running offset from the 1x ripple of ud (tools/offset_ripple.py)
+
+Velocity mode +-3 rad/s 12 s each (comp 0.38 V, PI 0.2 / 0.3 / 0.01), offsets as left by XO. Least squares
+ud(th) = c + A cos th + B sin th on ~3800 samples per direction (+-0.0017 V on A, B, i.e. +-3 mA):
+
+| direction | iq | A / B [V] | offset error ia / ib / ic [A] |
+|---|---|---|---|
+| +3 rad/s | +0.275 | +0.0035 / -0.0142 | -0.006 / +0.025 / -0.019 |
+| -3 rad/s | -0.267 | -0.0265 / -0.0062 | +0.047 / -0.014 / -0.033 |
+
+- The two directions differ well beyond the fit precision: the 1x ud ripple is not only an offset. The part common
+  to both directions (the offset) is ia +0.020, ib +0.005 A; the part that changes sign with the direction (~0.015 V)
+  matches a ~1° electrical 1x angle error projecting the back-EMF (~0.96 V at 3 rad/s) on the d axis, or another
+  sign dependent effect.
+- `XO<da>,<db>` now shifts the measured currents by hand (XO alone still re-centres at 0 V). Not applied yet
+  (needs a reflash): XO then XO-0.020,-0.005, check with offset_ripple.py, map the stalls again.
