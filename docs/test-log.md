@@ -1100,3 +1100,33 @@ Loop time (cloud build run 44832025239, perf_run 2 rad/s, dev / branch alternate
 data/2026-11-20/perf_setpwm.csv): dev 296.9 / 296.9 us, branch 287.9 / 287.9 us: -9.0 us (-3.0 %; -10.8 us without
 the guard). Flash -56 B, RAM same. Saturation (U >= supply) not run on the motor (needs full voltage): covered by
 the PC test only.
+
+## 2026-11-21 (night, compile only, board off) - more loop and size explorations
+
+Soft float calls per loop function in the dev ELF (static count): setPhaseVoltage 69 (mostly the trapezoid modes;
+SVPWM: _sincos, inverse Park / Clarke products already shared by the compiler, 4 compares for min / max),
+_writeDutyCycle6PWM 46 (hardware 6PWM path: 3 x u2f, fmul, f2u), loopFOC 45, PIDController 32, getABCurrents 18
+(only one compare used on a 2-phase board: not worth changing, and pins instead of `== 0` would change the formula
+when a measured current is exactly 0).
+
+**PID: derivative skipped when D is 0** (candas-agent perf/pid-skip-zero-derivative 6f0f96c): `output = P + I;
+if (D != 0) output += D*(e - e_prev)/dt`. D is 0 in the 3 loop PIDs (current q, d, velocity). In the binary, with D =
+0 each call skips fsub, fmul, fdiv and fadd for one fcmpeq. Flash +8 B. PC equivalence (tools/pid_equiv.py, float32,
+C semantics): 2 million random cases (half with D = 0, with / without limit and ramp): output and integral identical
+bit for bit; 24000 special-value combinations: identical whenever D != 0; with D = 0 only an infinite error differs
+(dev: 0 x inf = NaN output; branch: finite, limited) and the sign of a zero output. Expected (not measured: board off):
+~10-13 us less in loopFOC (2 PIDs, ~250 cycles per soft division from the setPwm measurement), ~6 us in move.
+
+**Size** (cloud build run 44833596974, whole firmware, same bench code):
+
+| variant | flash [B] | RAM [B] |
+|---|---|---|
+| dev (perf_dev_f103) | 90204 | 27288 |
+| `-D SIMPLEFOC_DISABLE_DEBUG` (no debug messages) | 84820 (-5384, -6 %) | same |
+| `-ffast-math` | 90124 (-80) | same |
+| `-flto` | 83508 (-6696) | 18816 |
+
+**LTO must not be used with SimpleFOC**: the STM32 low-side current sense overrides are lost (no
+HAL_ADCEx_InjectedStart, _findBestADCForInjectedPins, no HAL_ADCEx_InjectedGetValue call left: the generic weak
+functions are linked instead, i.e. no current measurement), and the bench `hall_edges` buffer (read only by pyOCD)
+is removed. SIMPLEFOC_DISABLE_DEBUG is a safe user flag (-5.4 KB) for projects that do not need the messages.

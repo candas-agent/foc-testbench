@@ -22,7 +22,8 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
 | P1 | Dead-time compensation | measured on 3 boards, [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) open (review, then upstream PR) |
 | P1 | STM32 Arduino core 3.0 compatibility | [simplefoc#588](https://github.com/simplefoc/Arduino-FOC/issues/588) (third party): test and support |
-| P2 | Fewer soft float operations per loop (divisions, float compares ~20 % of the F103 CPU time) | PC profile done, not started |
+| P1 | PID derivative skipped when D is 0 (3 soft divisions per loop) | candas-agent `perf/pid-skip-zero-derivative` (6f0f96c), PC equivalence tested, **to measure on the board** (expected ~-4 % loopFOC) |
+| P2 | Fewer soft float operations per loop (divisions, float compares ~20 % of the F103 CPU time) | PC profile done, PID derivative done (see above); remaining: LowPassFilter alpha division, compares |
 | P2 | PC unit tests (PlatformIO native) for edge cases of refactors | not started; cloud build workflow ready |
 | P2 | Circle limitation of the dq voltage and current | not started |
 | P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started |
@@ -62,6 +63,8 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Double precision promotions | SimpleFOC dev | ✅ `-Wdouble-promotion` + ELF callers: only SmoothingSensor in the loop (drivers PR), library clean | — | — | — | ✔ nothing to fix | — | env `dblaudit_f103` |
 | qfplib soft float | Cortex-M0/M3 without FPU | ✅ ~5 % faster | M | H (GPL licence) | L | P4 | — | bench, local |
 | Firmware size (small atof, no `lib_archive`) | Projects | ✅ 45.8 → 34.8 KB on the sketch | L | L | L | P4 | — | sketch, local |
+| `SIMPLEFOC_DISABLE_DEBUG` user flag | Projects | ✅ -5.4 KB flash on the F103 bench firmware | L | L | L | P3 (documentation) | — | env `size_nodebug_f103` |
+| LTO (`-flto`) | Projects | ✅ built: **breaks SimpleFOC** (weak hardware functions: STM32 current sense dropped) | — | H | — | P4 never | — | env `size_lto_f103`, test log 21/11 |
 
 ## Control and new features
 
