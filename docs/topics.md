@@ -16,14 +16,15 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
-| P1 | Hall velocity decays between edges | branch ready, measured, no PR yet |
+| P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
+| P1 | Dead-time compensation | measured on 3 boards, [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) open (review, then upstream PR) |
 | P1 | STM32 Arduino core 3.0 compatibility | [simplefoc#588](https://github.com/simplefoc/Arduino-FOC/issues/588) (third party): test and support |
 | P2 | `dt` once per `loopFOC`, `setPwm` single division | measured in the GD32 optimisation, separate PRs to make |
-| P2 | Dead-time compensation | measured, branch exists |
 | P2 | Circle limitation of the dq voltage and current | not started |
 | P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started |
 | P2 | SmoothingSensor float/double fix | [drivers PR](https://github.com/Candas1/Arduino-FOC-drivers/pull/3) draft |
 | P2 | GD32 loop optimisations, GD32 core `micros()` report | measured, for the GD32 driver / core |
+| P3 | Low speed (< 2 rad/s) limited by the R_ds_on current sense errors | diagnosed, needs an independent current reference (scope + current probe) |
 
 ## Bug fixes
 
@@ -35,7 +36,7 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Hall velocity valid again after a `_micros()` wrap | `HallSensor` | ❌ | M | L | L | P2 | [#469](https://github.com/simplefoc/Arduino-FOC/pull/469) (open PR) | third party |
 | GD32 core `micros()` goes back by up to 1 ms | CommunityGD32Cores core | ✅ worked around (`gd32_micros.c`) | M | L | L | P2 | — | not reported yet |
 | `Sensor::getVelocity()`: value held by #453, then reset to 0 | Non hall sensors (encoders, magnetic) | ❌ | H | M | M | P3 | [#453](https://github.com/simplefoc/Arduino-FOC/pull/453), [#533](https://github.com/simplefoc/Arduino-FOC/issues/533), [#592](https://github.com/simplefoc/Arduino-FOC/issues/592) | none (needs an encoder bench) |
-| Real speed ~8 % low at 2 rad/s with hall sensors | `HallSensor` | ✅ observed, not fixed | M | M | M | P3 | — | none |
+| Real speed ~8 % low at 2 rad/s with hall sensors | `HallSensor` + dead time | ✅ gone with dead-time compensation + hall velocity decay together (1.98 at 2 rad/s); with the soft PI -4 % at 1 rad/s instead of -14 % | M | — | — | ✔ (by the two PRs) | — | [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) + [#3](https://github.com/candas-agent/Arduino-FOC/pull/3) |
 | FreeRTOS pulled in by the library finder on GD32 | PlatformIO + GD32 | ✅ worked around (`lib_ignore`) | L | L | L | P4 | — | bench and sketch |
 
 ## Performance
@@ -55,19 +56,20 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 
 | Topic | Scope | Tested | Impact | Risk | Effort | Priority | Related issues | Branch / PR |
 |---|---|---|---|---|---|---|---|---|
-| **Hall velocity decays between edges** instead of holding then dropping to 0 | `HallSensor`, all families | ✅ A/B vs dev: stalls -64 / -76 %, current ripple -35 %, no change at 5 rad/s | H | L | L | **P1** | [#453](https://github.com/simplefoc/Arduino-FOC/pull/453), [#533](https://github.com/simplefoc/Arduino-FOC/issues/533) (same question for other sensors), [#469](https://github.com/simplefoc/Arduino-FOC/pull/469) (same function) | [candas-agent fix/hall-velocity-decay](https://github.com/candas-agent/Arduino-FOC/tree/fix/hall-velocity-decay), no PR yet |
-| Dead-time compensation | Current sense, all families | ✅ ESC1 and GD32F130 (THD 10 → 2.7 %); F103: 0.38 V, low speed stalls -90 %, iq ripple -40 %; with the hall velocity decay: 0 stalls, iq ripple -60 %, speed error gone | H | M | M | P2 | forum thread "PWM Deadtime compensation", [#200](https://github.com/simplefoc/Arduino-FOC/issues/200) | [candas-agent feat/deadtime-compensation-dev](https://github.com/candas-agent/Arduino-FOC/tree/feat/deadtime-compensation-dev) (on dev) |
+| **Hall velocity decays between edges** instead of holding then dropping to 0 | `HallSensor`, all families | ✅ A/B vs dev: stalls -64 / -76 %, current ripple -35 %, no change at 5 rad/s; with the dead-time compensation 0 stalls at ±2 rad/s | H | L | L | **P1** | [#453](https://github.com/simplefoc/Arduino-FOC/pull/453), [#533](https://github.com/simplefoc/Arduino-FOC/issues/533) (same question for other sensors), [#469](https://github.com/simplefoc/Arduino-FOC/pull/469) (same function) | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) (fix/hall-velocity-decay → dev) |
+| **Dead-time compensation** | Current sense, all families | ✅ ESC1 and GD32F130 (THD 10 → 2.7 %); STM32F103: 0.38 V (1.45 × programmed), stalls at 2 rad/s -90 %, iq ripple -40 %, neutral at 5 rad/s; with the hall velocity decay: 0 stalls at ±2 rad/s, iq ripple -60 %, speed error gone. No effect below ~1 rad/s (threshold 0.02-0.2 A tried) | H | M | M | **P1** | forum thread "PWM Deadtime compensation", [#200](https://github.com/simplefoc/Arduino-FOC/issues/200) | [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) (feat/deadtime-compensation-dev → dev; #1 on master closed) |
 | Circle limitation of the dq voltage and current | All families | ❌ | H | M | M | P2 | [#246](https://github.com/simplefoc/Arduino-FOC/issues/246), [#317](https://github.com/simplefoc/Arduino-FOC/issues/317) | none |
 | Overvoltage protection, run time bus voltage | All families | ✅ run time bus voltage read on STM32; no protection yet | H (safety) | M | M | P2 | — | bench (reading only) |
-| Velocity PI tuned per MCU loop time | Documentation | ✅ STM32F103: P 0.4, I 1, Tf 10 ms | M | L | L | P2 | — | test log |
+| Velocity PI tuned per MCU loop time | Documentation / examples | ✅ STM32F103 hoverboard: P 0.2, I 0.3, Tf 10 ms (with compensation + decay), as good or better than 0.4 / 1 from 1 to 5 rad/s, no speed dependent gains needed; softer or a longer filter is worse | M | L | L | P2 | — | test log |
+| Low speed stalls below 2 rad/s come from current sense errors | R_ds_on current sense (hoverboard boards) | ✅ diagnosed: stalls mapped on the hall-counted position sit in 1-2 electrical sectors out of 6, not at a mechanical spot; a 0.02-0.04 A offset change moves that sector; offsets drift with temperature (0.02 → 0.05 A); re-centring at 0 V or from the 1x ud ripple helps a little (stalls 104 → 73), not reproducible enough to fix it | M | M | H | P3 | — | bench (`XO`, `tools/offset_trim.py`, `offset_ripple.py`, `stall_map.py`, `stall_sectors.py`); needs a scope + current probe |
 | Field weakening | All families, useful for hoverboard motors | ❌ (needs the circle limitation) | H | H | H | P3 | [#246](https://github.com/simplefoc/Arduino-FOC/issues/246), [#317](https://github.com/simplefoc/Arduino-FOC/issues/317) | none |
 | Automatic minimum low-side on-time | Low-side current sense | ❌ | M | M | M | P3 | — | none |
 | ADC sampling point shifted with timer channel 4 | STM32F1 (already done on GD32) | 🔧 reviewed (CC4 fires twice per period) | M | M | M | P3 | — | [Candas1 CC4](https://github.com/Candas1/Arduino-FOC/tree/CC4) (2024, to rewrite) |
-| Battery side current limit (DC link shunt) | Boards with a DC link shunt | ❌ | M | M | M | P3 | — | none |
+| Battery side current limit (DC link shunt) | Boards with a DC link shunt (gen 1 hoverboard: PC1 right motor, PC0 left, from EFeru) | ❌ (not usable as a phase current reference: tiny at low speed, 0 at the PWM centre sampling) | M | M | M | P3 | — | none |
 | Hall sector table and calibration (VESC style) | Hall | ✅ edges within ±5°, no measurable effect on this motor | L | L | M | P4 | [drivers#67](https://github.com/simplefoc/Arduino-FOC-drivers/pull/67) (60° hall detection), [forum post](https://community.simplefoc.com/t/hall-effect-sensor-skip-calibration/235/20) | bench only (`tools/hall_calib.py`, `hall_table.*`) |
 | Velocity from the measured sector widths | Hall | ✅ good at low speed, worse at 5 rad/s | L | M | L | P4 | — | bench only |
 | Velocity averaged over 6 hall edges | Hall | ✅ +5 % overspeed, oscillates at 5 rad/s | L | M | L | P4 | — | bench only |
-| Friction feed-forward | Generic | ✅ no effect | L | L | L | P4 | — | bench (`XF` command) |
+| Friction feed-forward | Generic | ✅ no effect, also with the soft PI at 1 rad/s (0.1-0.3 A) | L | L | L | P4 | — | bench (`XF` command) |
 | Velocity through a position ramp at low speed | Generic | ✅ vibrates with P_angle 5-20 | M | M | M | P4 (revisit with tuning) | [#534](https://github.com/simplefoc/Arduino-FOC/issues/534) | bench (`V` command) |
 | Cogging compensation | Encoder only | ❌ (hall sensors too coarse) | M | M | H | P4 | — | future bench |
 | Hall to observer handover | Hall + MXLEMMING | ❌ | M | H | H | P4 | — | none |
@@ -91,3 +93,5 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Unit tests on a PC (PlatformIO native, in the cloud) | Tooling | ❌ | M | L | M | P3 | — | none |
 | 5065 motor bench with three sensors (on-board encoder, halls, shaft encoder) | Bench | ❌ | M (enables encoder tests) | L | H | P3 | — | idea |
 | Multi-board bench (ESC1, GD32F130, GD32F103, STM32F103) | Bench | ✅ | — | — | — | ✔ | — | this repository |
+| Low speed campaign options: dead-time A/B (`--dt V@threshold`), PI / friction sweeps (`--pi P/I/Tf/XF`), targets, hall edge log (`--edges`) | Bench | ✅ | — | — | — | ✔ | — | `tools/lowspeed_campaign.py` |
+| Position without absolute encoder: hall sectors counted since boot (`dbg.hall_count`), stall maps | Bench | ✅ | — | — | — | ✔ | — | `tools/stall_map.py`, `tools/stall_sectors.py` |
