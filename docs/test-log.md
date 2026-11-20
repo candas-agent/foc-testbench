@@ -1015,3 +1015,27 @@ Slower: on the F1 the Cortex-M3 fetches code from SRAM through the system bus (n
 data accesses), and calls between flash and RAM go through long branch veneers (3-5 % of the samples). With 2 wait
 states and the prefetch, the flash is the fastest place. Not worth it; the GD32F103 advantage is its zero wait
 state flash, not reproducible on the STM32F103.
+
+## 2026-11-20 - "acceptable" loop optimisations on the STM32F103 (one branch each, from dev ae7b3ad)
+
+Branches on candas-agent/Arduino-FOC: perf/setpwm-single-limit (ae62ac9), perf/loopfoc-dt-once (c07cdbf),
+perf/current-sense-pins-int (d88e569), all three merged in test/perf-acceptable (b356781). No API or behaviour change:
+- setPwm (3PWM and 6PWM): one limit to min(voltage_limit, voltage_power_supply), then one multiplication by
+  1/voltage_power_supply: same duty cycle, 7 float compares instead of 12, 1 division instead of 3 (simplefoc#356).
+- loopFOC: one elapsed time for the 2 current filters and the 2 current PIs (simplefoc#325, same commit as GD32).
+- pins: `pin != _NC` (integer) instead of `_isset(pin)` (int converted to float, soft float compare) in
+  Inline/LowsideCurrentSense and the STM32 injected ADC read.
+
+tools/perf_run.py at 2 rad/s, 10 XP reads of 256 loops, dev and the combined firmware measured twice
+(data/2026-11-20/perf_accept.csv). Flash = whole firmware (same bench code and flags):
+
+| firmware | loopFOC [us] | vs dev | move [us] | total [us] | flash [B] |
+|---|---|---|---|---|---|
+| dev (x2) | 297.1 / 297.1 | | 81.8 | 432.1 | 89604 |
+| setPwm one limit, one division | 286.3 | -10.8 (-3.6 %) | 79.8 | 419.1 | 89524 (-80) |
+| dt once per loopFOC | 273.7 | -23.4 (-7.9 %) | 80.5 | 407.1 | 89764 (+160) |
+| pins compared as integers | 289.2 | -7.9 (-2.7 %) | 79.6 | 413.9 | 89484 (-120) |
+| the three (x2) | 255.3 / 255.5 | -41.7 (-14.0 %) | 81.6 / 82.5 | 381.8 / 383.0 | 89572 (-32) |
+
+The gains add up (10.8 + 23.4 + 7.9 = 42.1 us vs 41.7 measured), repeatable to 0.2 us. They pay the dead-time
+compensation cost (+31 us) with 11 us to spare. RAM unchanged. move unchanged (none of them touch it).
