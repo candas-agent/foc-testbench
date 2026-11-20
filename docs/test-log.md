@@ -1130,3 +1130,25 @@ bit for bit; 24000 special-value combinations: identical whenever D != 0; with D
 HAL_ADCEx_InjectedStart, _findBestADCForInjectedPins, no HAL_ADCEx_InjectedGetValue call left: the generic weak
 functions are linked instead, i.e. no current measurement), and the bench `hall_edges` buffer (read only by pyOCD)
 is removed. SIMPLEFOC_DISABLE_DEBUG is a safe user flag (-5.4 KB) for projects that do not need the messages.
+
+### Clock reads and _normalizeAngle (night, compile only)
+
+Clock reads per loop in the library (dev): loopFOC 1, move 1, SmoothingSensor 1, LowPassFilter 3 (current q / d,
+velocity), PIDController 3 (current q / d, velocity) = 9 (getCurrentMicros + HAL_GetTick were 3.6 % of the loop).
+simplefoc#596 removes 4. Next candidate (stacked on #596, same pattern): the velocity filter and PI from the move()
+time (updateMotionControlTime), with the same care (user Ts, reset after a pause: own timestamp of the velocity step).
+Not written yet.
+
+LowPassFilter alpha = Tf / (Tf + dt): the default Tf is not 0, the division is needed (no simple gain).
+
+**simplefoc#530** (jaguilar, faster `_normalizeAngle`: `angle - floorf(angle / 2PI) * 2PI` instead of fmodf, plus
+normalisation in `_electricalAngle`, the open loop angle and the alignment), cherry-picked on dev ae7b3ad (candas-agent
+test/pr530-on-dev a083b84, one conflict: dev already uses fmodf), env perf_pr530_f103 built in the cloud (run
+44834847297): flash -376 B, `_normalizeAngle` = fmul, floorf, fmul, fsub (fmodf was ~1.1 % of the loop). To measure.
+Comparison on the PC (tools/normalize_equiv.py, float32):
+- electrical angles 0..15 turns: max difference 3.3e-6 rad, both always in [0, 2PI);
+- -1000..1000 rad: max difference 3e-5 rad; #530 returns slightly **negative** angles in 8 of 5 million (down to
+  -6e-5 rad); near multiples of 2PI (k = -2000..2000): 634 of 12000 outside [0, 2PI), down to -0.001 rad;
+- consequence in setPhaseVoltage trapezoid modes: sector = 6 * a / 2PI becomes -1 (out of trap_120_map) in those
+  cases; dev has the same problem much more rarely (returns exactly 2PI once in 12000 near multiples: sector 6).
+Worth telling jaguilar / the maintainers (not posted: the user decides).
