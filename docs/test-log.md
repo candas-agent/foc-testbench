@@ -1216,3 +1216,10 @@ trapezoid sector 6/12 (out of the map) for angles ~ -PI/6; non-centred trapezoid
 getDCCurrent sign wrong when the angle is exactly 0; `_sqrtApprox` up to 3.4 % error (dc_current); `_atan2(0,0)` NaN
 (#583). Correct: _sin/_cos on [0, 2PI] (1.6e-4), sine/SVPWM vectors, centred trapezoid, getFOCCurrents (3e-4 A),
 Sensor velocity/angle at +-0.05/3/200 rad/s across the 2^31 us wrap.
+
+Audit part 2 (same firmware): closed loop with a simulated motor (pp 7, R 1, flux 0.01, J 1e-4, sensor CW and CCW,
+zero angle 0.7): velocity +-20 rad/s (7e-5), angle +3/-3 rad (3e-5 rad, velocity limit kept), foc_current 0.5/-0.5 A
+and 2 A limited to 1 A (peak 1.07 A), applied voltage <= voltage_limit, initFOC real alignment finds the direction
+and 0.700 rad: all correct. HallSensor (private state set directly): steady rotation both ways across 2^31 us OK,
+reversal and stop OK; **a glitch to 000/111 makes the angle jump up to 3 sectors (180 deg electrical)** for that
+update (sector -1 from ELECTRIC_SECTORS), no drift after.
