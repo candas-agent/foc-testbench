@@ -375,7 +375,7 @@ static void check_closed_loop() {
       float tgt = ph ? -20.0f : 20.0f;
       sim_loop(tgt, 4000);   // 1.2 s
       // the true rotor turns dir * shaft velocity (the sensor is mounted the other way round for dir -1)
-      float err = fabsf(mot.w * dir - tgt) / 20.0f;
+      float err = fabsf(mot.w - tgt) / 20.0f;   // shaft = dir * sensor = true rotor
       v.cases++; if (err > 0.03f) v.fails++;
       worse(v, err, tgt, mot.w, m->shaft_velocity);
     }
@@ -403,7 +403,7 @@ static void check_closed_loop() {
     for (int ph = 0; ph < 3; ph++) {
       float iq_max = 0;
       for (int k = 0; k < 600; k++) { sim_loop(tg[ph], 1); mot.w = 0; if (fabsf(mot.iq) > iq_max) iq_max = fabsf(mot.iq); }
-      float expect = _constrain(tg[ph], -1.0f, 1.0f) * dir;   // true iq has the sign of the rotor direction
+      float expect = _constrain(tg[ph], -1.0f, 1.0f);
       float err = fabsf(mot.iq - expect);
       c.cases++; if (err > 0.03f) c.fails++;
       worse(c, err, tg[ph], mot.iq, iq_max);
@@ -418,7 +418,7 @@ static void check_closed_loop() {
     float zerr = ok ? fabsf(remainderf(m->zero_electric_angle - 0.7f, _2PI)) : INFINITY;
     bool dir_ok = ok && ((dir > 0) == (m->sensor_direction == Direction::CW));
     sim_loop(15.0f, 4000);
-    float verr = fabsf(mot.w * dir - 15.0f) / 15.0f;
+    float verr = fabsf(mot.w - 15.0f) / 15.0f;
     float err = fmaxf(zerr, verr) + (dir_ok ? 0.0f : 10.0f);
     ag.cases++; if (!ok || !dir_ok || zerr > 0.05f || verr > 0.03f) ag.fails++;
     worse(ag, err, m->zero_electric_angle, (float)(int)m->sensor_direction, mot.w, (float)ok);
