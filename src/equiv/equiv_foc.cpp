@@ -33,6 +33,7 @@ static float fake_angle = 0;
 class FakeSensor : public Sensor {
 public:
   float getSensorAngle() override { return fake_angle; }
+  void init() override { Sensor::init(); }
 };
 
 class FakeDriver : public BLDCDriver {
