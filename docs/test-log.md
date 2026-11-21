@@ -1228,3 +1228,7 @@ Audit part 3: dc_current torque (rotor held) gives 0.512 A for 0.5 A (+2.4 %, _s
 velocity_openloop +-10 rad/s OK; SmoothingSensor on HallSensor continuous across edges both ways (drivers 1f67e02);
 **StepperMotor angle_openloop with a negative angle: no voltage** (same _sin cause); LPF step response, PID ramp,
 PID anti-windup, updateMotionControlType targets OK.
+
+Audit part 4 (Commander::motor() on the simulated motor): MLU-2 -> 2 V applied at target 0; MLUnan -> 10 V applied
+(limit was 6 V); MWT9 (invalid modulation) -> last 2 V stay applied at target 0; MLC-1 -> 1.04 A at target 0 A;
+MLV-5 in angle mode -> runs the wrong way (-11 rad for +3). No validation of the values (atof, enum cast).
