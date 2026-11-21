@@ -7,7 +7,7 @@
  *  -D EQUIV_PWM : BLDCDriver6PWM::setPwm (TIM1, the motor pins) and BLDCDriver3PWM::setPwm (PC6/PC7/PC8, high side
  *                 inputs of the unused left motor), duty cycles read back from the timer registers.
  *                 THE MAIN SUPPLY MUST BE OFF (board fed by the ST-Link 3.3 V, gate drivers unpowered): the firmware
- *                 refuses to start the PWM if the bus voltage reads above 3 V.
+ *                 refuses to start the PWM if the bus voltage reads above 10 V.
  *
  * Build the same firmware with the dev library: every count must then be "identical" (checks the copies below).
  */
@@ -209,7 +209,8 @@ void setup() {
   float vbus = 0;
   for (int k = 0; k < 16; k++) vbus += analogRead(PC2) * (3.3f / 4095.0f) * 29.3f / 16.0f;
   equiv_pwm6.vbus = equiv_pwm3.vbus = vbus;
-  if (vbus > 3.0f) { equiv_pwm6.state = equiv_pwm3.state = 2; return; }
+  // supply off, board on the ST-Link 3.3 V: reads ~5.6 V (offset of the divider/ADC, measured 21/11); 26 V supply: ~26 V
+  if (vbus > 10.0f) { equiv_pwm6.state = equiv_pwm3.state = 2; return; }
 
   driver6.voltage_power_supply = 26.0f;
   driver6.voltage_limit = 2.0f;
