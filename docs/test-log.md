@@ -1152,3 +1152,18 @@ Comparison on the PC (tools/normalize_equiv.py, float32):
 - consequence in setPhaseVoltage trapezoid modes: sector = 6 * a / 2PI becomes -1 (out of trap_120_map) in those
   cases; dev has the same problem much more rarely (returns exactly 2PI once in 12000 near multiples: sector 6).
 Worth telling jaguilar / the maintainers (not posted: the user decides).
+
+## 21/11 - PID D=0, PID redundant _isset, #530 vs dev (STM32F103, 2 rad/s)
+tools/perf_run.py, 10 XP reads of 256 loops, cloud builds (dev and isset: run 44876679852, pid: 44834046818,
+#530: 44834847297), alternated; data/2026-11-21/perf_pid.csv. Wait ~3 s after pyocd flash before perf_run
+(otherwise dbg.magic reads 0).
+
+| firmware | loopFOC | move | total | flash |
+|---|---|---|---|---|
+| dev ae7b3ad (3 runs) | 297.0 us | 81.6 us | 431.7 us | 90208 B |
+| PID derivative skipped when D=0 (2-3 runs) | 292.2 (-1.6%) | 78.0 (-4.4%) | 423.0 (-2.0%) | +8 B |
+| PID redundant _isset removed (2 runs) | 295.5 (-0.5%) | 81.4 | 430.2 (-0.35%) | -16 B |
+| #530 _normalizeAngle (1 run) | 295.7 (-0.4%) | 80.9 | 428.5 (-0.7%) | |
+
+Redundant _isset: only one float compare call less per PID in the binary (GCC already merged part of it);
+exhaustive PC check (tools/pid_isset_equiv.py, all 2^32 floats): same ramp condition.
