@@ -1188,3 +1188,21 @@ off: ~2 V on the bus with a multimeter, firmware reads 1.9-5.6 V; gate drivers n
 - **setPwm 15254e1** (fix: `inv_supply < INFINITY` in the condition, else no voltage): unexpected 0, max 1 count with
   a valid supply, register always == dc * (ARR+1). dc can exceed 1 by one ulp with a supply ~3e38 V (4 phases):
   register 2000 = ARR+1, the same as dev. Flash -40 B vs dev (was -56 B). Loop time with the guard: to measure.
+
+## 2026-11-21 - On-target checks of the PRs already sent upstream (simplefoc#595, #596)
+
+- **#595 pins** (equiv_pins_f103, Candas1 94074ca): `_isset(pin)` vs `pin != _NC` for every int in [-2^25, 2^25],
+  INT32_MIN/MAX and 2^20 random ints (68157443 values): no difference (pins are `int`, _NC = (int)-12345).
+- **#596 dt once** (equiv_foc_dev/pr_f103, Candas1 a87b5e1): loopFOC + move with a fake driver, current sense,
+  sensor and a fake clock (`-Wl,--wrap=_Z7_microsv`), a fresh motor per case, traces compared bit for bit
+  (tools/equiv_foc_compare.py). Identical: filter/PID called directly (operator(), steps 0 to 2 s), steady loop,
+  disabled 0.05 / 0.25 / 0.29 / 0.6 s, Ts set, voltage mode 0.1 s, _micros wrap. **Different:**
+  1. pause (disabled or another torque mode) between 0.3 and 0.5 s: the first PID step after it uses the time since
+     the PID's last own-timed call (the first step of the run) instead of the pause (old operator() with a stale
+     timestamp, the new path does not update it). Small (~3 % of voltage.q here).
+  2. back to foc_current after < 0.3 s in dc_current or estimated_current (which use LPF/PID_current_q): the PR uses
+     the absence as dt (documented) -> integral kick: voltage.q 1.90 -> 3.70 V (dc_current 0.1 s), 1.18 -> 1.81 V
+     (estimated_current 0.1 s) on the first loop.
+  3. loopFOC twice in the same microsecond (dt = 0): PR takes the old path, the current filters see a stale
+     timestamp (> 0.3 s) and restart from the new value; dev keeps the previous value (alpha = 1).
+  4. Ts set then set back to NOT_SET at run time: dev uses a stale timestamp on the first step, the PR does not.
