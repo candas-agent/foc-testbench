@@ -1223,3 +1223,8 @@ and 2 A limited to 1 A (peak 1.07 A), applied voltage <= voltage_limit, initFOC 
 and 0.700 rad: all correct. HallSensor (private state set directly): steady rotation both ways across 2^31 us OK,
 reversal and stop OK; **a glitch to 000/111 makes the angle jump up to 3 sectors (180 deg electrical)** for that
 update (sector -1 from ELECTRIC_SECTORS), no drift after.
+
+Audit part 3: dc_current torque (rotor held) gives 0.512 A for 0.5 A (+2.4 %, _sqrtApprox); estimated_current OK;
+velocity_openloop +-10 rad/s OK; SmoothingSensor on HallSensor continuous across edges both ways (drivers 1f67e02);
+**StepperMotor angle_openloop with a negative angle: no voltage** (same _sin cause); LPF step response, PID ramp,
+PID anti-windup, updateMotionControlType targets OK.
