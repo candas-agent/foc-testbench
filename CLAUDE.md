@@ -49,6 +49,10 @@ branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard spli
 - Any change of platformio.ini wipes every local .pio/build: another reason to build in the cloud.
 - Before a PR that claims "same behaviour": written edge-case check (NaN, 0, negative, NOT_SET, rounding, first
   call, after a pause, user-set parameters), PC test when possible (e.g. tools/setpwm_equiv.py).
+- And an on-target test against dev (src/equiv/, docs/audit-dev.md): same firmware built with dev must give 100 %
+  identical (checks the reference copy); fake clock with `-Wl,--wrap=_Z7_microsv`. The `equiv_pwm_*` firmwares drive
+  the PWM pins: only with the main supply off (board on the ST-Link 3.3 V; they refuse above 10 V on the bus).
+- docs/audit-dev.md lists the bugs found in dev and in our PRs, what is known upstream and what is left to fix.
 - Local build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.
 - Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
 - Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).

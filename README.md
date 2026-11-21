@@ -206,6 +206,9 @@ python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --durati
 | `tools/ol_run.py ... --out run.csv` | yes | live reads to CSV, current fundamental fitted on the open loop angle, `--equal` (DE1), `--ramp` |
 | `tools/fold_compare.py a.csv b.csv --labels ...` | no | waveforms from `ol_run.py --out` folded on the angle: THD, zero crossing share, plot |
 | `tools/zero_torque.py --port rtt --env gd32f130 --comp 0.605 --threshold 1.22` | yes (closed loop, hall board) | zero torque test: no compensation / DM0 / DM1, 20 s each, the motor beeps N times before phase N |
+| `tools/equiv_read.py --elf <equiv_pid/pwm elf>` | no (`equiv_pwm_*`: main supply off) | on-target equivalence of PR code vs dev, see [docs/audit-dev.md](docs/audit-dev.md) |
+| `tools/equiv_foc_compare.py --dev <elf> --pr <elf> [--pins <elf>]` | no | loopFOC scenarios with a fake clock, dev vs PR traces |
+| `tools/equiv_audit_read.py --elf <equiv_audit elf>` | no | audit of SimpleFOC dev functions on the target (fake driver / sensors / clock, simulated motor) |
 
 ## Reading the board memory with pyOCD
 

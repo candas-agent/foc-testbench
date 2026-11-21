@@ -1,8 +1,9 @@
 # Topics explored with this bench
 
-Overview of everything investigated so far (last update 2026-11-20 evening): what kind of change it is, where it applies,
+Overview of everything investigated so far (last update 2026-11-21): what kind of change it is, where it applies,
 whether it was measured, how much it would improve SimpleFOC, the risk and the effort, and where the code is.
-Measurements and details are in [test-log.md](test-log.md).
+Measurements and details are in [test-log.md](test-log.md). On-target audit of dev and of our PRs (bugs, what is
+known upstream, what is left): [audit-dev.md](audit-dev.md).
 
 **Tested**: ✅ measured on a board, 🔧 built or reviewed only, ❌ not tried yet.
 **Impact** (how much it improves the library for its users), **Risk** (regressions, side effects, number of users
@@ -15,16 +16,20 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Priority | Topic | Status |
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
-| P1 | `dt` once per loopFOC (loopFOC -6.1 % on F103, after the fix for a user-set `Ts` and the filter reset) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open, description updated |
-| P1 | `setPwm` one limit and one division, guard for invalid voltages (loopFOC -3.0 % on F103) | ready on candas-agent `perf/setpwm-single-limit` (d41eef5), PC equivalence tested: waiting for the user's branch on Candas1 |
+| P1 | `dt` once per loopFOC (loopFOC -6.1 % on F103) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open, **do not merge as is**: differences with dev found on the target (voltage kick back from dc/estimated current), rework needed, see [audit-dev.md](audit-dev.md) |
+| P1 | `setPwm` one limit and one division, guard for invalid voltages (loopFOC -3.0 % on F103) | [Candas1#23](https://github.com/Candas1/Arduino-FOC/pull/23) (15254e1, overflow bug found on the target and fixed): measure the loop time with the guard, update the description |
 | P1 | Current sense pins compared as integers (loopFOC -2.7 % on F103) | [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
 | P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
 | P1 | Dead-time compensation | measured on 3 boards, [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) open (review, then upstream PR) |
 | P1 | STM32 Arduino core 3.0 compatibility | [simplefoc#588](https://github.com/simplefoc/Arduino-FOC/issues/588) (third party): test and support |
-| P1 | PID derivative skipped when D is 0 (3 soft divisions per loop) | candas-agent `perf/pid-skip-zero-derivative` (6f0f96c), PC equivalence tested, **to measure on the board** (expected ~-4 % loopFOC) |
+| P1 | PID derivative skipped when D is 0 (-2.2 % with D = 0, +1.1 % with D set) | [Candas1#24](https://github.com/Candas1/Arduino-FOC/pull/24), tested on the target: review |
+| P1 | Safety: Commander accepts negative / NaN limits and invalid modulation types (torque or voltage at target 0) | found on the target ([audit-dev.md](audit-dev.md) #11-12), not reported upstream |
+| P1 | `angle_openloop` (and stepper) with a negative angle applies no voltage on STM32 (`_sin` of a negative angle = 0) | found on the target, cause in [simplefoc#505](https://github.com/simplefoc/Arduino-FOC/issues/505): add our evidence, propose a fix |
+| P2 | HallSensor glitch 000/111: angle jumps 180 deg electrical for one update | found on the target, not reported upstream |
+| P2 | `getDCCurrent`: sign wrong at angle 0, `_sqrtApprox` 3.4 % (dc_current +2.4 %); trapezoid sector out of the map at ~ -PI/6 | found on the target, not reported upstream |
 | P2 | Fewer soft float operations per loop (divisions, float compares ~20 % of the F103 CPU time) | PC profile done, PID derivative done (see above); remaining: LowPassFilter alpha division, compares |
-| P2 | PC unit tests (PlatformIO native) for edge cases of refactors | not started; cloud build workflow ready |
+| P2 | Unit tests for edge cases of refactors | on-target test firmwares done (`src/equiv/`, fake clock / driver / sensors, simulated motor), PC math test (`test_native/`) |
 | P2 | Circle limitation of the dq voltage and current | not started |
 | P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started |
 | P2 | SmoothingSensor float/double fix | [drivers PR](https://github.com/Candas1/Arduino-FOC-drivers/pull/3) draft |
