@@ -11,6 +11,9 @@
 #define private public
 #endif
 #include <SimpleFOC.h>
+#if defined(EQUIV_AUDIT_DRIVERS)
+#include "encoders/smoothing/SmoothingSensor.h"
+#endif
 #undef private
 
 #if defined(EQUIV_AUDIT)
@@ -25,7 +28,7 @@ struct AuditRec {
   float max_err;    // largest error found
   float worst[4];   // inputs / outputs of the worst case
 };
-#define N_AUDIT 48
+#define N_AUDIT 64
 AuditRec audit[N_AUDIT];
 struct { uint32_t magic, state, n; } audit_state = {0xE0E0A0D1u, 0, 0};
 
@@ -509,6 +512,200 @@ static void check_hall() {
 }
 
 
+
+// ---------------------------------------------------------------- 60-61: dc_current and estimated_current torque modes
+static void check_current_modes() {
+  // 60: dc_current, rotor held: 0.5 A then -0.5 A (current magnitude from getDCCurrent)
+  {
+    AuditRec& r = rec(60);
+    model_motor(1, MotionControlType::torque, TorqueControlType::dc_current, false);
+    const float tg[] = {0.5f, -0.5f};
+    for (int ph = 0; ph < 2; ph++) {
+      for (int k = 0; k < 1500; k++) { sim_loop(tg[ph], 1); mot.w = 0; }
+      float mag = sqrtf(mot.id * mot.id + mot.iq * mot.iq) * (mot.iq < 0 ? -1.0f : 1.0f);
+      float err = fabsf(mag - tg[ph]) / 0.5f;
+      r.cases++; if (err > 0.02f) r.fails++;
+      worse(r, err, tg[ph], mag, mot.iq, mot.id);
+    }
+  }
+  // 61: estimated_current with the right phase resistance, rotor held: 0.5 A then -0.5 A
+  {
+    AuditRec& r = rec(61);
+    model_motor(1, MotionControlType::torque, TorqueControlType::estimated_current, false);
+    m->phase_resistance = M_R;
+    const float tg[] = {0.5f, -0.5f};
+    for (int ph = 0; ph < 2; ph++) {
+      for (int k = 0; k < 1500; k++) { sim_loop(tg[ph], 1); mot.w = 0; }
+      float err = fabsf(mot.iq - tg[ph]) / 0.5f;
+      r.cases++; if (err > 0.02f) r.fails++;
+      worse(r, err, tg[ph], mot.iq, mot.id);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 62: velocity open loop, both directions
+static void check_velocity_openloop() {
+  AuditRec& r = rec(62);
+  const float tg[] = {10.0f, -10.0f};
+  for (int ph = 0; ph < 2; ph++) {
+    new_motor(MotionControlType::velocity_openloop, TorqueControlType::voltage, false);
+    float amp, prev, ang;
+    float sum = 0; int n = 0;
+    m->loopFOC(); m->move(tg[ph]);
+    fake_us += 1000; m->loopFOC(); m->move(tg[ph]);
+    vec(amp, prev);
+    for (int k = 0; k < 500; k++) {
+      fake_us += 1000;
+      m->move(tg[ph]);     // the open loop angle is advanced in move(), applied by loopFOC()
+      m->loopFOC();
+      vec(amp, ang);
+      sum += remainderf(ang - prev, _2PI); n++;
+      prev = ang;
+    }
+    // electrical speed of the applied vector vs pole_pairs * target
+    float w_el = sum / (n * 1e-3f);
+    float err = fabsf(w_el - 7 * tg[ph]) / fabsf(7 * tg[ph]);
+    r.cases++; if (err > 0.01f || fabsf(amp - 2.0f) > 0.05f) r.fails++;
+    worse(r, fmaxf(err, fabsf(amp - 2.0f)), tg[ph], w_el, amp);
+  }
+}
+
+// ---------------------------------------------------------------- 63-64: SmoothingSensor on a HallSensor
+#if defined(EQUIV_AUDIT_DRIVERS)
+static void check_smoothing() {
+  for (int d = 0; d < 2; d++) {
+    AuditRec& r = rec(63 + d);
+    HallSensor* h = new_hall(0);
+    BLDCMotor* mm = new (motor_buf) BLDCMotor(15);
+    mm->sensor_direction = Direction::CW;
+    alignas(SmoothingSensor) static uint8_t sbuf[sizeof(SmoothingSensor)];
+    SmoothingSensor* s = new (sbuf) SmoothingSensor(*h, *mm);
+    float w = (d ? -1.0f : 1.0f) * (_2PI / 90.0f) / 0.002f;   // 1 sector every 2 ms
+    mm->shaft_velocity = w;
+    int count = 0;
+    uint32_t t_edge = fake_us;
+    s->update();
+    float prev = s->getAngle();
+    for (int k = 0; k < 4000; k++) {
+      fake_us += 100;
+      if (fake_us - t_edge >= 2000) { t_edge += 2000; count += d ? -1 : 1; hall_set(*h, hall_of_sector(wrap6(count))); }
+      s->update();
+      float a = s->getAngle();
+      if (k > 30) {
+        // between two samples the smoothed angle must advance by w * 100 us, also across the hall edges
+        float err = fabsf((a - prev) - w * 100e-6f) / (_2PI / 90.0f);   // in sectors
+        r.cases++; if (err > 0.05f) r.fails++;
+        worse(r, err, (float)count, a, prev, w * 100e-6f);
+      }
+      prev = a;
+    }
+  }
+}
+#endif
+
+// ---------------------------------------------------------------- 65: stepper in angle open loop, negative angles
+class FakeStepper : public StepperDriver {
+public:
+  int init() override { initialized = true; return 1; }
+  void enable() override {}
+  void disable() override {}
+  void setPwm(float a, float b) override { Ua = a; Ub = b; }
+  void setPhaseState(PhaseState, PhaseState) override {}
+  float Ua = 0, Ub = 0;
+};
+FakeStepper fstepper;
+alignas(StepperMotor) static uint8_t stepper_buf[sizeof(StepperMotor)];
+static void check_stepper_openloop() {
+  AuditRec& r = rec(65);
+  StepperMotor* sm = new (stepper_buf) StepperMotor(50);
+  fstepper.voltage_power_supply = 12; fstepper.voltage_limit = 12;
+  fstepper.init();
+  sm->linkDriver(&fstepper);
+  sm->controller = MotionControlType::angle_openloop;
+  sm->torque_controller = TorqueControlType::voltage;
+  sm->voltage_limit = 2;
+  sm->velocity_limit = 20;
+  sm->init();
+  sm->initFOC();
+  for (int k = 0; k < 1000; k++) {
+    fake_us += 1000;
+    sm->loopFOC();
+    sm->move(-2.0f);
+    float amp = sqrtf(fstepper.Ua * fstepper.Ua + fstepper.Ub * fstepper.Ub);
+    if (sm->shaft_angle < -0.1f) {
+      float err = fabsf(amp - 2.0f);
+      r.cases++; if (err > 0.05f) r.fails++;
+      worse(r, err, sm->shaft_angle, amp);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 66-68: LPF and PID behaviour
+static void check_lpf_pid() {
+  // 66: LPF step response, Tf 10 ms, Ts 100 us: after 10 ms, 1 - (Tf/(Tf+Ts))^100 = 0.6303
+  {
+    AuditRec& r = rec(66);
+    LowPassFilter f(0.01f);
+    f(0.0f);
+    float y = 0;
+    for (int k = 0; k < 100; k++) { fake_us += 100; y = f(1.0f); }
+    float err = fabsf(y - 0.63031f);
+    r.cases++; if (err > 1e-3f) r.fails++;
+    worse(r, err, y);
+  }
+  // 67: PID output ramp: P 1, ramp 100 /s, error step 10: output may rise by at most 100 * dt per call
+  {
+    AuditRec& r = rec(67);
+    PIDController p(1.0f, 0.0f, 0.0f, 100.0f, 20.0f);
+    p(0.0f);
+    float prev = 0;
+    for (int k = 0; k < 200; k++) {
+      fake_us += 1000;
+      float u = p(10.0f);
+      float rate = (u - prev) / 1e-3f;
+      r.cases++; if (rate > 100.0f * 1.01f) r.fails++;
+      worse(r, rate - 100.0f, u, prev, rate);
+      prev = u;
+    }
+  }
+  // 68: PID anti-windup: I 100, limit 1, error +1 for 1 s then -1: the output must leave +1 at the first call
+  {
+    AuditRec& r = rec(68);
+    PIDController p(0.0f, 100.0f, 0.0f, NOT_SET, 1.0f);
+    for (int k = 0; k < 1000; k++) { fake_us += 1000; p(1.0f); }
+    int calls = 0;
+    float u = 1;
+    while (u >= 0.999f && calls < 1000) { fake_us += 1000; u = p(-1.0f); calls++; }
+    r.cases++; if (calls > 2) r.fails++;
+    worse(r, (float)calls, u);
+  }
+}
+
+// ---------------------------------------------------------------- 69: target when the motion control type changes
+static void check_mode_change() {
+  AuditRec& r = rec(69);
+  model_motor(1, MotionControlType::velocity, TorqueControlType::voltage, false);
+  sim_loop(10.0f, 1000);
+  // velocity -> angle: the target becomes the present angle (no jump)
+  m->updateMotionControlType(MotionControlType::angle);
+  float e1 = fabsf(m->target - m->shaft_angle);
+  // angle -> velocity: target 0
+  m->target = 5;
+  m->updateMotionControlType(MotionControlType::velocity);
+  float e2 = fabsf(m->target);
+  // velocity -> torque: target 0
+  m->target = 5;
+  m->updateMotionControlType(MotionControlType::torque);
+  float e3 = fabsf(m->target);
+  // torque -> angle_openloop: target = present angle
+  m->updateMotionControlType(MotionControlType::angle_openloop);
+  float e4 = fabsf(m->target - m->shaft_angle);
+  float err = fmaxf(fmaxf(e1, e2), fmaxf(e3, e4));
+  r.cases++; if (err > 1e-6f) r.fails++;
+  worse(r, err, e1, e2, e3, e4);
+}
+
+
 void equiv_audit_setup() {
   memset(audit, 0, sizeof(audit));
   check_sincos();
@@ -519,6 +716,14 @@ void equiv_audit_setup() {
   check_sensor();
   check_closed_loop();
   check_hall();
+  check_current_modes();
+  check_velocity_openloop();
+#if defined(EQUIV_AUDIT_DRIVERS)
+  check_smoothing();
+#endif
+  check_stepper_openloop();
+  check_lpf_pid();
+  check_mode_change();
   audit_state.state = 1;
 }
 #else

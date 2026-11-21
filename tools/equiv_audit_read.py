@@ -57,6 +57,16 @@ CHECKS = {
     52: ("HallSensor glitch to 000/111: angle jump (sectors)", "sector, bad state, angle before, during"),
     53: ("HallSensor glitch to 000/111: angle after (sectors of drift)", "sector, bad state, angle before, after"),
     54: ("HallSensor velocity after reversal / when stopped", "velocity after reversal, velocity stopped"),
+    60: ("dc_current torque, rotor held, 0.5 / -0.5 A", "target, signed |i|, iq, id"),
+    61: ("estimated_current torque (right R), rotor held, 0.5 / -0.5 A", "target, iq, id"),
+    62: ("velocity open loop +10 / -10 rad/s: vector speed and amplitude", "target, electrical speed, amplitude"),
+    63: ("SmoothingSensor on HallSensor, forward: continuity across hall edges (sectors)", "count, angle, previous, expected step"),
+    64: ("SmoothingSensor on HallSensor, backward: continuity across hall edges (sectors)", "count, angle, previous, expected step"),
+    65: ("StepperMotor angle open loop, negative angle: voltage amplitude", "shaft angle, amplitude"),
+    66: ("LowPassFilter step response (Tf 10 ms, 100 x 100 us)", "output"),
+    67: ("PID output ramp 100 /s respected", "output, previous, rate"),
+    68: ("PID anti-windup: calls to leave the limit after the error reverses", "calls, output"),
+    69: ("target after updateMotionControlType", "vel->angle, angle->vel, vel->torque, torque->angle_openloop"),
 }
 REC = "<3If4f"
 
