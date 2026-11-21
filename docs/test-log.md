@@ -1167,3 +1167,8 @@ tools/perf_run.py, 10 XP reads of 256 loops, cloud builds (dev and isset: run 44
 
 Redundant _isset: only one float compare call less per PID in the binary (GCC already merged part of it);
 exhaustive PC check (tools/pid_isset_equiv.py, all 2^32 floats): same ramp condition.
+
+D = 1e-6 on the 3 PIDs (perf_run --extra MQD0.000001 MDD0.000001 MVD0.000001, dev / pid alternated twice;
+data/2026-11-21/perf_pid_dset.csv): dev loopFOC 304.9 / move 84.3 / total 442.3 us, PID branch 307.5 / 85.9 /
+446.2 us: **+3.9 us (+0.9 %) when D is set** (~1.3 us per PID, more than the 0.5 us estimated from one compare).
+Dev itself is 10.6 us slower with D = 1e-6 than with D = 0: libgcc multiply/divide take a fast path on a zero operand.

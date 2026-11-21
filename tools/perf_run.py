@@ -34,6 +34,7 @@ def main():
     p.add_argument("--csv", default=None)
     p.add_argument("--pc", type=int, default=0, help="PC samples taken after the XP reads, motor still running")
     p.add_argument("--top", type=int, default=25)
+    p.add_argument("--extra", nargs="*", default=[], help="commands sent after the setup, motor disabled (e.g. MQD0.000001)")
     a = p.parse_args()
     reads = []
     counts = collections.Counter()
@@ -53,8 +54,10 @@ def main():
         setup = ["ME0", "VO", "MLC2", "MT2", "MC1", "M0", "ST0", "MVP0.4", "MVI1", "MVF0.01"]
         if a.dt is not None:
             setup += ["XF0", "DM0", f"D{a.dt}", "DT0.2"]
-        for c in setup + [f"M{a.speed}"]:
-            cmd(c)
+        for c in setup + a.extra + [f"M{a.speed}"]:
+            out = cmd(c)
+            if c in a.extra:
+                print(c, "->", out.strip().replace("\n", " | "))
         try:
             cmd("ME1", 0.0)
             t0 = time.time()
