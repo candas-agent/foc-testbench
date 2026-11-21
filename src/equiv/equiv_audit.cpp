@@ -5,8 +5,13 @@
  * the reason to run this on the target.
  */
 #include <Arduino.h>
-#include <SimpleFOC.h>
 #include <new>
+#if defined(EQUIV_AUDIT)
+// test code only: access to the private state of HallSensor (glitch / timing checks without pins)
+#define private public
+#endif
+#include <SimpleFOC.h>
+#undef private
 
 #if defined(EQUIV_AUDIT)
 
@@ -20,7 +25,7 @@ struct AuditRec {
   float max_err;    // largest error found
   float worst[4];   // inputs / outputs of the worst case
 };
-#define N_AUDIT 40
+#define N_AUDIT 48
 AuditRec audit[N_AUDIT];
 struct { uint32_t magic, state, n; } audit_state = {0xE0E0A0D1u, 0, 0};
 
@@ -254,6 +259,256 @@ static void check_sensor() {
   }
 }
 
+
+// ---------------------------------------------------------------- 30-45: closed loop with a simulated motor
+// Motor model (true rotor): pp 7, R 1 Ohm, flux 0.01 Wb, J 1e-4, friction 1e-5; currents = steady state (L ~ 0).
+// The fake sensor reads dir * theta (so sensor_direction = dir is right), true zero electric angle 0.7 rad.
+static struct { float th, w, id, iq; int dir; bool quasi_static; float zero; } mot;
+static const float M_R = 1.0f, M_FLUX = 0.01f, M_J = 1e-4f, M_B = 1e-5f;
+static const int M_PP = 7;
+static float true_el() { return M_PP * mot.th - mot.zero; }
+static void applied_ab(float& al, float& be) {
+  al = (2.0f * fdriver.Ua - fdriver.Ub - fdriver.Uc) / 3.0f;
+  be = (fdriver.Ub - fdriver.Uc) * _1_SQRT3;
+}
+class ModelSensor : public Sensor {
+public:
+  float getSensorAngle() override {
+    if (mot.quasi_static) {
+      // alignment: the rotor flux follows the applied voltage vector (strong field, no load)
+      float al, be;
+      applied_ab(al, be);
+      if (al * al + be * be > 1e-4f) {
+        float el = atan2f(be, al);
+        float th = (el + mot.zero) / M_PP;
+        float k = roundf((mot.th - th) / (_2PI / M_PP));   // nearest mechanical solution
+        mot.th = th + k * (_2PI / M_PP);
+      }
+    }
+    float a = fmodf(mot.dir * mot.th, _2PI);
+    return a < 0 ? a + _2PI : a;
+  }
+  void init() override { Sensor::init(); }
+};
+class ModelCurrentSense : public CurrentSense {
+public:
+  int init() override { initialized = true; return 1; }
+  PhaseCurrent_s getPhaseCurrents() override {
+    float e = true_el(), c = cosf(e), s = sinf(e);
+    float al = mot.id * c - mot.iq * s, be = mot.id * s + mot.iq * c;
+    PhaseCurrent_s p;
+    p.a = al; p.b = -0.5f * al + _SQRT3_2 * be; p.c = -p.a - p.b;
+    return p;
+  }
+};
+alignas(ModelSensor) static uint8_t msensor_buf[sizeof(ModelSensor)];
+alignas(ModelCurrentSense) static uint8_t mcs_buf[sizeof(ModelCurrentSense)];
+
+static void model_step(float dt) {
+  float al, be;
+  applied_ab(al, be);
+  float e = true_el(), c = cosf(e), s = sinf(e);
+  float vd = al * c + be * s, vq = be * c - al * s;
+  float we = M_PP * mot.w;
+  mot.id = vd / M_R;
+  mot.iq = (vq - M_FLUX * we) / M_R;
+  float torque = 1.5f * M_PP * M_FLUX * mot.iq;
+  mot.w += (torque - M_B * mot.w) / M_J * dt;
+  mot.th += mot.w * dt;
+}
+
+static float vmax_seen;
+static void sim_loop(float target, int n, float dt_s = 300e-6f) {
+  for (int k = 0; k < n; k++) {
+    fake_us += (uint32_t)(dt_s * 1e6f);
+    model_step(dt_s);
+    m->loopFOC();
+    m->move(target);
+    float amp, ang;
+    vec(amp, ang);
+    if (amp > vmax_seen) vmax_seen = amp;
+  }
+}
+
+static bool model_motor(int dir, MotionControlType ctrl, TorqueControlType tc, bool align) {
+  mot.th = 0.3f; mot.w = 0; mot.id = 0; mot.iq = 0; mot.dir = dir; mot.quasi_static = false; mot.zero = 0.7f;
+  m = new (motor_buf) BLDCMotor(M_PP);
+  fdriver.voltage_power_supply = 12;
+  fdriver.voltage_limit = 12;
+  fdriver.init();
+  m->linkDriver(&fdriver);
+  ModelSensor* ms = new (msensor_buf) ModelSensor();
+  ms->init();
+  m->linkSensor(ms);
+  ModelCurrentSense* mc = new (mcs_buf) ModelCurrentSense();
+  mc->linkDriver(&fdriver);
+  mc->init();
+  mc->skip_align = true;
+  m->linkCurrentSense(mc);
+  m->controller = ctrl;
+  m->torque_controller = tc;
+  m->voltage_limit = 6;
+  m->voltage_sensor_align = 2;
+  m->velocity_limit = 30;
+  m->current_limit = 1;
+  m->PID_velocity.P = 0.05f; m->PID_velocity.I = 1.0f; m->PID_velocity.D = 0;
+  m->P_angle.P = 10;
+  m->PID_current_q.P = 1; m->PID_current_q.I = 300;
+  m->PID_current_d.P = 1; m->PID_current_d.I = 300;
+  if (!align) { m->zero_electric_angle = 0.7f; m->sensor_direction = dir > 0 ? Direction::CW : Direction::CCW; }
+  m->init();
+  mot.quasi_static = align;
+  int ok = m->initFOC();
+  mot.quasi_static = false;
+  mot.w = 0;
+  vmax_seen = 0;
+  return ok != 0;
+}
+
+static void check_closed_loop() {
+  for (int dir = 1; dir >= -1; dir -= 2) {
+    int base = dir > 0 ? 30 : 40;
+    // velocity mode, voltage torque control: +20 then -20 rad/s
+    AuditRec& v = rec(base + 0);
+    model_motor(dir, MotionControlType::velocity, TorqueControlType::voltage, false);
+    for (int ph = 0; ph < 2; ph++) {
+      float tgt = ph ? -20.0f : 20.0f;
+      sim_loop(tgt, 4000);   // 1.2 s
+      // the true rotor turns dir * shaft velocity (the sensor is mounted the other way round for dir -1)
+      float err = fabsf(mot.w * dir - tgt) / 20.0f;
+      v.cases++; if (err > 0.03f) v.fails++;
+      worse(v, err, tgt, mot.w, m->shaft_velocity);
+    }
+    float vmax_v = vmax_seen;
+    // angle mode: +3 rad then -3 rad, velocity limit 10
+    AuditRec& a = rec(base + 1);
+    model_motor(dir, MotionControlType::angle, TorqueControlType::voltage, false);
+    m->updateVelocityLimit(10);
+    float wmax = 0;
+    for (int ph = 0; ph < 2; ph++) {
+      float tgt = ph ? -3.0f : 3.0f;
+      for (int k = 0; k < 8000; k++) { sim_loop(tgt, 1); if (fabsf(mot.w) > wmax) wmax = fabsf(mot.w); }
+      float err = fabsf(m->shaft_angle - tgt);
+      a.cases++; if (err > 0.02f) a.fails++;
+      worse(a, err, tgt, m->shaft_angle, wmax);
+    }
+    if (vmax_seen > vmax_v) vmax_v = vmax_seen;
+    AuditRec& al = rec(base + 2);   // velocity limit respected in angle mode
+    al.cases++; if (wmax > 10.0f * 1.15f) al.fails++;
+    worse(al, wmax / 10.0f - 1.0f, wmax);
+    // foc_current torque mode: +0.5 A, -0.5 A, then 2 A with current_limit 1 A (rotor held: w = 0)
+    AuditRec& c = rec(base + 3);
+    model_motor(dir, MotionControlType::torque, TorqueControlType::foc_current, false);
+    const float tg[] = {0.5f, -0.5f, 2.0f};
+    for (int ph = 0; ph < 3; ph++) {
+      float iq_max = 0;
+      for (int k = 0; k < 600; k++) { sim_loop(tg[ph], 1); mot.w = 0; if (fabsf(mot.iq) > iq_max) iq_max = fabsf(mot.iq); }
+      float expect = _constrain(tg[ph], -1.0f, 1.0f) * dir;   // true iq has the sign of the rotor direction
+      float err = fabsf(mot.iq - expect);
+      c.cases++; if (err > 0.03f) c.fails++;
+      worse(c, err, tg[ph], mot.iq, iq_max);
+    }
+    // voltage limit: largest applied vector over the voltage-mode runs above
+    AuditRec& vl = rec(base + 4);
+    vl.cases++; if (vmax_v > 6.0f * 1.001f) vl.fails++;
+    worse(vl, vmax_v - 6.0f, vmax_v);
+    // alignment (initFOC finds direction and zero angle), then velocity mode
+    AuditRec& ag = rec(base + 5);
+    bool ok = model_motor(dir, MotionControlType::velocity, TorqueControlType::voltage, true);
+    float zerr = ok ? fabsf(remainderf(m->zero_electric_angle - 0.7f, _2PI)) : INFINITY;
+    bool dir_ok = ok && ((dir > 0) == (m->sensor_direction == Direction::CW));
+    sim_loop(15.0f, 4000);
+    float verr = fabsf(mot.w * dir - 15.0f) / 15.0f;
+    float err = fmaxf(zerr, verr) + (dir_ok ? 0.0f : 10.0f);
+    ag.cases++; if (!ok || !dir_ok || zerr > 0.05f || verr > 0.03f) ag.fails++;
+    worse(ag, err, m->zero_electric_angle, (float)(int)m->sensor_direction, mot.w, (float)ok);
+  }
+}
+
+// ---------------------------------------------------------------- 50-54: HallSensor (state set directly)
+static void hall_set(HallSensor& h, int state) {
+  h.A_active = (state >> 2) & 1; h.B_active = (state >> 1) & 1; h.C_active = state & 1;
+  h.updateState();
+}
+static int hall_of_sector(int sec) {   // inverse of ELECTRIC_SECTORS
+  for (int st = 1; st < 7; st++) if (ELECTRIC_SECTORS[st] == sec) return st;
+  return 0;
+}
+alignas(HallSensor) static uint8_t hall_buf[sizeof(HallSensor)];
+static HallSensor* new_hall(int sec) {
+  memset(hall_buf, 0, sizeof(hall_buf));
+  HallSensor* h = new (hall_buf) HallSensor(PC10, PC11, PC12, 15);
+  h->use_interrupt = 1;   // update() then only copies the state (no digitalRead)
+  h->hall_state = hall_of_sector(sec); h->electric_sector = sec; h->electric_rotations = 0;
+  h->direction = Direction::CW; h->old_direction = Direction::CW;
+  h->pulse_timestamp = fake_us;
+  h->pulse_diff = 0;
+  return h;
+}
+static int wrap6(int c) { return ((c % 6) + 6) % 6; }
+static void check_hall() {
+  // 50/51: steady rotation forward / backward, 1 sector every 2 ms, across the 2^31 us wrap
+  for (int d = 0; d < 2; d++) {
+    AuditRec& r = rec(50 + d);
+    fake_us = 0x80000000u - 100000u;
+    HallSensor* h = new_hall(0);
+    int count = 0;
+    for (int k = 0; k < 400; k++) {
+      fake_us += 2000;
+      count += d ? -1 : 1;
+      hall_set(*h, hall_of_sector(wrap6(count)));
+      h->update();
+      float exp_angle = count * (_2PI / 90.0f);
+      float exp_vel = (d ? -1.0f : 1.0f) * (_2PI / 90.0f) / 0.002f;
+      float aerr = fabsf(h->getAngle() - exp_angle);
+      float v = h->getVelocity();
+      float verr = (k > 2) ? fabsf(v - exp_vel) / fabsf(exp_vel) : 0.0f;
+      r.cases++; if (aerr > 1e-4f || verr > 0.01f) r.fails++;
+      worse(r, fmaxf(aerr, verr), (float)count, h->getAngle(), v, exp_vel);
+    }
+  }
+  // 52/53: glitch to an invalid state (000 or 111) then back
+  {
+    AuditRec& r = rec(52);
+    AuditRec& rr = rec(53);
+    for (int sec = 0; sec < 6; sec++)
+      for (int bad = 0; bad < 2; bad++) {
+        fake_us += 10000;
+        HallSensor* h = new_hall(sec);
+        h->update();
+        float before = h->getAngle();
+        fake_us += 50;
+        hall_set(*h, bad ? 7 : 0);
+        h->update();
+        float during = h->getAngle();
+        fake_us += 50;
+        hall_set(*h, hall_of_sector(sec));
+        h->update();
+        float after = h->getAngle();
+        float jump = fabsf(during - before) / (_2PI / 90.0f);   // in sectors
+        r.cases++; if (jump > 1.01f) r.fails++;
+        worse(r, jump, (float)sec, (float)(bad ? 7 : 0), before, during);
+        float drift = fabsf(after - before) / (_2PI / 90.0f);
+        rr.cases++; if (drift > 0.01f) rr.fails++;
+        worse(rr, drift, (float)sec, (float)(bad ? 7 : 0), before, after);
+      }
+  }
+  // 54: velocity right after a direction change, and after stopping
+  {
+    AuditRec& r = rec(54);
+    HallSensor* h = new_hall(0);
+    int count = 0;
+    for (int k = 0; k < 20; k++) { fake_us += 2000; count++; hall_set(*h, hall_of_sector(wrap6(count))); h->update(); }
+    fake_us += 2000; count--; hall_set(*h, hall_of_sector(wrap6(count))); h->update();
+    float v_rev = h->getVelocity();
+    r.cases++; if (v_rev > 0.0f) { r.fails++; worse(r, v_rev, v_rev); }
+    fake_us += 500000; h->update();
+    float v_stop = h->getVelocity();
+    r.cases++; if (v_stop != 0.0f) { r.fails++; worse(r, fabsf(v_stop), v_rev, v_stop); }
+  }
+}
+
+
 void equiv_audit_setup() {
   memset(audit, 0, sizeof(audit));
   check_sincos();
@@ -262,6 +517,8 @@ void equiv_audit_setup() {
   check_sector();
   check_current();
   check_sensor();
+  check_closed_loop();
+  check_hall();
   audit_state.state = 1;
 }
 #else

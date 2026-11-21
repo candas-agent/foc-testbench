@@ -40,6 +40,23 @@ CHECKS = {
     20: ("Sensor -3 rad/s across the 2^31 us wrap", "t from wrap [us], velocity, expected, angle error"),
     21: ("Sensor 200 rad/s across the 2^31 us wrap", "t from wrap [us], velocity, expected, angle error"),
     22: ("Sensor -200 rad/s across the 2^31 us wrap", "t from wrap [us], velocity, expected, angle error"),
+    30: ("sensor CW: velocity mode +-20 rad/s (relative error)", "target, true velocity, shaft_velocity"),
+    31: ("sensor CW: angle mode +3 / -3 rad", "target, shaft_angle, max |velocity|"),
+    32: ("sensor CW: angle mode, velocity limit 10 rad/s respected", "max |velocity|"),
+    33: ("sensor CW: foc_current torque 0.5 / -0.5 / 2 A (limit 1 A)", "target, true iq, max |iq|"),
+    34: ("sensor CW: applied voltage <= voltage_limit 6 V", "max amplitude"),
+    35: ("sensor CW: initFOC alignment (direction, zero angle 0.7), then 15 rad/s", "zero_electric_angle, sensor_direction, velocity, initFOC ok"),
+    40: ("sensor CCW: velocity mode +-20 rad/s (relative error)", "target, true velocity, shaft_velocity"),
+    41: ("sensor CCW: angle mode +3 / -3 rad", "target, shaft_angle, max |velocity|"),
+    42: ("sensor CCW: angle mode, velocity limit 10 rad/s respected", "max |velocity|"),
+    43: ("sensor CCW: foc_current torque 0.5 / -0.5 / 2 A (limit 1 A)", "target, true iq, max |iq|"),
+    44: ("sensor CCW: applied voltage <= voltage_limit 6 V", "max amplitude"),
+    45: ("sensor CCW: initFOC alignment (direction, zero angle 0.7), then 15 rad/s", "zero_electric_angle, sensor_direction, velocity, initFOC ok"),
+    50: ("HallSensor forward 1 sector / 2 ms across 2^31 us", "count, angle, velocity, expected"),
+    51: ("HallSensor backward 1 sector / 2 ms across 2^31 us", "count, angle, velocity, expected"),
+    52: ("HallSensor glitch to 000/111: angle jump (sectors)", "sector, bad state, angle before, during"),
+    53: ("HallSensor glitch to 000/111: angle after (sectors of drift)", "sector, bad state, angle before, after"),
+    54: ("HallSensor velocity after reversal / when stopped", "velocity after reversal, velocity stopped"),
 }
 REC = "<3If4f"
 
