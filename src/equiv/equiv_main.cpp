@@ -213,11 +213,13 @@ static void run_pwm(EquivResult& r, BLDCDriver* drv, float* dc[3], int handle_id
 #endif
 
 void equiv_foc_setup();   // equiv_foc.cpp (EQUIV_FOC, EQUIV_PINS)
+void equiv_audit_setup();  // equiv_audit.cpp (EQUIV_AUDIT)
 
 void setup() {
   pinMode(SELF_HOLD_PIN, OUTPUT);
   digitalWrite(SELF_HOLD_PIN, HIGH);
   equiv_foc_setup();
+  equiv_audit_setup();
 #if defined(EQUIV_PID)
   equiv_pid.magic = EQUIV_MAGIC;
   run_pid(2000000);
