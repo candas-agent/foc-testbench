@@ -188,7 +188,8 @@ static void run_pwm(EquivResult& r, BLDCDriver* drv, float* dc[3], int handle_id
       if (vps > 0.0f && vps < 1.17549435e-38f) r.subnormal_cases++;
       if (!same(d_new, d_dev) || reg != reg_dev) all_same = false;
       uint32_t diff = reg > reg_dev ? reg - reg_dev : reg_dev - reg;
-      bool valid = vps > 0.0f;   // supply set and positive (NaN, 0, negative, NOT_SET: invalid)
+      // supply set, positive and 1 / supply finite (NaN, 0, negative, NOT_SET, below ~3e-39: invalid, PR gives 0)
+      bool valid = vps > 0.0f && (1.0f / vps) < INFINITY;
       if (valid) {
         if (diff > r.max_count_diff) r.max_count_diff = diff;
         if (vps >= 1.17549435e-38f && diff > r.normal_max_diff) r.normal_max_diff = diff;
