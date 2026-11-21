@@ -1206,3 +1206,13 @@ off: ~2 V on the bus with a multimeter, firmware reads 1.9-5.6 V; gate drivers n
   3. loopFOC twice in the same microsecond (dt = 0): PR takes the old path, the current filters see a stale
      timestamp (> 0.3 s) and restart from the new value; dev keeps the previous value (alpha = 1).
   4. Ts set then set back to NOT_SET at run time: dev uses a stale timestamp on the first step, the PR does not.
+
+## 2026-11-21 - Audit of SimpleFOC dev on the target (src/equiv/equiv_audit.cpp, tools/equiv_audit_read.py)
+
+No peripheral (fake driver / current sense / sensor / clock). Summary and links in C:\Dev\notes\audit_dev.md.
+Found in dev: `_sin`/`_cos` of a negative angle = 0 on STM32 (simplefoc#505) -> **angle_openloop with a negative
+target applies no voltage** (all phases 6 V, electrical angle -35 rad traced); `_sin` wrong above ~411775 rad;
+trapezoid sector 6/12 (out of the map) for angles ~ -PI/6; non-centred trapezoid with Uq < 0 gives nothing (#580);
+getDCCurrent sign wrong when the angle is exactly 0; `_sqrtApprox` up to 3.4 % error (dc_current); `_atan2(0,0)` NaN
+(#583). Correct: _sin/_cos on [0, 2PI] (1.6e-4), sine/SVPWM vectors, centred trapezoid, getFOCCurrents (3e-4 A),
+Sensor velocity/angle at +-0.05/3/200 rad/s across the 2^31 us wrap.
