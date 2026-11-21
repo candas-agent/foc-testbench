@@ -12,6 +12,7 @@
  */
 #include <Arduino.h>
 #include <SimpleFOC.h>
+#include <new>
 
 #if defined(EQUIV_FOC)
 
@@ -22,7 +23,7 @@ struct Rec { float a, b, c, d; };
 #define FOC_TRACE_LEN 2100
 Rec foc_trace[FOC_TRACE_LEN];
 struct FocResult {
-  uint32_t magic, state, n, scenario_start[10], init_status;
+  uint32_t magic, state, n, scenario_start[20], init_status;
 } foc_result = {0xE0E0F001u, 0, 0, {0}, 0};
 
 static uint32_t rng = 0x2468ACE1u;
@@ -64,27 +65,58 @@ public:
   }
 };
 
-BLDCMotor motor = BLDCMotor(15);
+// a fresh motor (and fake sensor / current sense) for each case: the differences of one case do not carry over
+alignas(BLDCMotor) static uint8_t motor_buf[sizeof(BLDCMotor)];
+alignas(FakeSensor) static uint8_t sensor_buf[sizeof(FakeSensor)];
+alignas(FakeCurrentSense) static uint8_t cs_buf[sizeof(FakeCurrentSense)];
+BLDCMotor* m;
 FakeDriver fdriver;
-FakeSensor fsensor;
-FakeCurrentSense fcs;
 
 static void step(uint32_t dt_us, float target) {
   fake_us += dt_us;
   fake_angle += 0.002f;
   fake_iq = 0.8f * fake_iq + 0.2f * (target * 0.9f);   // the "motor" follows the target a bit
-  motor.loopFOC();
-  motor.move(target);
+  m->loopFOC();
+  m->move(target);
   if (foc_result.n < FOC_TRACE_LEN)
-    foc_trace[foc_result.n++] = {motor.voltage.q, motor.voltage.d, motor.current.q, motor.current.d};
+    foc_trace[foc_result.n++] = {m->voltage.q, m->voltage.d, m->current.q, m->current.d};
 }
 static uint32_t jitter() { return 250 + rnd() % 101; }  // 250-350 us
 
-static void scenario(int k) { foc_result.scenario_start[k] = foc_result.n; }
+static int n_cases = 0;
+static void new_case() { foc_result.scenario_start[n_cases++] = foc_result.n; }
+
+static void fresh() {
+  new_case();
+  fake_iq = 0.5f; fake_id = 0.0f;
+  FakeSensor* sensor = new (sensor_buf) FakeSensor();
+  FakeCurrentSense* cs = new (cs_buf) FakeCurrentSense();
+  m = new (motor_buf) BLDCMotor(15);
+  fdriver.voltage_power_supply = 12;
+  fdriver.voltage_limit = 12;
+  fdriver.init();
+  sensor->init();
+  m->linkSensor(sensor);
+  m->linkDriver(&fdriver);
+  cs->linkDriver(&fdriver);
+  cs->init();
+  cs->skip_align = true;
+  m->linkCurrentSense(cs);
+  m->torque_controller = TorqueControlType::foc_current;
+  m->controller = MotionControlType::torque;
+  m->voltage_limit = 6;
+  m->current_limit = 2;
+  m->phase_resistance = 0.2f;
+  m->zero_electric_angle = 0;
+  m->sensor_direction = Direction::CW;
+  m->init();
+  if (m->initFOC() != 1) foc_result.init_status++;
+  for (int k = 0; k < 30; k++) step(jitter(), 0.5f);   // warm-up, recorded
+}
 
 static void run_foc() {
-  // ---- S0: a filter and a PID called directly (operator(), clock steps from 0 to 2 s)
-  scenario(0);
+  // ---- case 0: a filter and a PID called directly (operator(), clock steps from 0 to 2 s)
+  new_case();
   {
     LowPassFilter lpf(0.01f);
     PIDController pid(1.0f, 100.0f, 0.001f, 1000.0f, 10.0f);
@@ -100,75 +132,58 @@ static void run_foc() {
     }
   }
 
-  // ---- motor setup: foc_current, torque control, everything fake
-  fdriver.voltage_power_supply = 12;
-  fdriver.voltage_limit = 12;
-  fdriver.init();
-  fsensor.init();
-  motor.linkSensor(&fsensor);
-  motor.linkDriver(&fdriver);
-  fcs.linkDriver(&fdriver);
-  fcs.init();
-  fcs.skip_align = true;
-  motor.linkCurrentSense(&fcs);
-  motor.torque_controller = TorqueControlType::foc_current;
-  motor.controller = MotionControlType::torque;
-  motor.voltage_limit = 6;
-  motor.current_limit = 2;
-  motor.phase_resistance = 0.2f;
-  motor.zero_electric_angle = 0;
-  motor.sensor_direction = Direction::CW;
-  motor.init();
-  foc_result.init_status = motor.initFOC();
+  // ---- case 1: steady loop, 250-350 us
+  fresh();
+  for (int k = 0; k < 250; k++) step(jitter(), 0.5f + 0.3f * _sin(k * 0.05f));
 
-  // ---- S1: steady loop, 250-350 us
-  scenario(1);
-  for (int k = 0; k < 400; k++) step(jitter(), 0.5f + 0.3f * _sin(k * 0.05f));
-
-  // ---- S2: motor disabled for a pause, then enabled again
-  scenario(2);
+  // ---- cases 2-7: motor disabled for a pause, then enabled again
   static const uint32_t pauses[] = {50000, 250000, 290000, 310000, 400000, 600000};
   for (int p = 0; p < 6; p++) {
-    for (int k = 0; k < 50; k++) step(jitter(), 0.6f);
-    motor.disable();
+    fresh();
+    m->disable();
     fake_us += pauses[p];
-    motor.enable();
+    m->enable();
     for (int k = 0; k < 30; k++) step(jitter(), 0.6f);
   }
 
-  // ---- S3: Ts set by the user on some filters and controllers
-  scenario(3);
-  motor.LPF_current_q.Ts = 1e-4f;
-  motor.PID_current_d.Ts = 2e-4f;
-  for (int k = 0; k < 200; k++) step(jitter(), 0.4f);
-  motor.LPF_current_q.Ts = NOT_SET;
-  motor.PID_current_d.Ts = NOT_SET;
+  // ---- case 8: Ts set by the user on some filters and controllers
+  fresh();
+  m->LPF_current_q.Ts = 1e-4f;
+  m->PID_current_d.Ts = 2e-4f;
+  for (int k = 0; k < 150; k++) step(jitter(), 0.4f);
+  // ---- case 9: same, then Ts set back to NOT_SET
+  fresh();
+  m->LPF_current_q.Ts = 1e-4f;
+  m->PID_current_d.Ts = 2e-4f;
+  for (int k = 0; k < 30; k++) step(jitter(), 0.4f);
+  m->LPF_current_q.Ts = NOT_SET;
+  m->PID_current_d.Ts = NOT_SET;
+  for (int k = 0; k < 30; k++) step(jitter(), 0.4f);
 
-  // ---- S4: other torque modes for a while, back to foc_current
-  scenario(4);
+  // ---- cases 10-15: other torque modes for a while (not recorded), back to foc_current
   static const TorqueControlType modes[] = {TorqueControlType::voltage, TorqueControlType::dc_current,
                                             TorqueControlType::estimated_current};
   static const uint32_t absences[] = {100000, 400000};
-  for (int m = 0; m < 3; m++)
+  for (int k_m = 0; k_m < 3; k_m++)
     for (int a = 0; a < 2; a++) {
-      for (int k = 0; k < 20; k++) step(jitter(), 0.5f);
-      motor.torque_controller = modes[m];
+      fresh();
+      m->torque_controller = modes[k_m];
       uint32_t t_end = fake_us + absences[a];
-      while (fake_us < t_end) { fake_us += 20000; motor.loopFOC(); motor.move(0.5f); }  // not recorded
-      motor.torque_controller = TorqueControlType::foc_current;
-      for (int k = 0; k < 20; k++) step(jitter(), 0.5f);
+      while (fake_us < t_end) { fake_us += 20000; m->loopFOC(); m->move(0.5f); }
+      m->torque_controller = TorqueControlType::foc_current;
+      for (int k = 0; k < 30; k++) step(jitter(), 0.5f);
     }
 
-  // ---- S5: some loops in the same microsecond (clock not moving)
-  scenario(5);
-  for (int k = 0; k < 100; k++) step(k % 10 == 0 ? 0 : jitter(), 0.5f);
+  // ---- case 16: some loops in the same microsecond (clock not moving)
+  fresh();
+  for (int k = 0; k < 70; k++) step(k % 10 == 0 ? 0 : jitter(), 0.5f);
 
-  // ---- S6: _micros() wrapping around 2^32
-  scenario(6);
-  fake_us = 0xFFFFFFFFu - 30000;
-  for (int k = 0; k < 200; k++) step(jitter(), 0.5f);
+  // ---- case 17: _micros() wrapping around 2^32
+  fake_us = 0xFFFFFFFFu - 40000;
+  fresh();
+  for (int k = 0; k < 170; k++) step(jitter(), 0.5f);
 
-  scenario(7);
+  new_case();
   foc_result.state = 1;
 }
 #endif
