@@ -706,6 +706,66 @@ static void check_mode_change() {
 }
 
 
+
+// ---------------------------------------------------------------- 70-74: Commander values reaching the motor
+// What the motor does after a mistyped / odd command (no validation in Commander::motor()).
+static float applied_amp() { float amp, ang; vec(amp, ang); return amp; }
+static void check_commander() {
+  Commander cmd;   // no serial port: replies are not printed
+  // 70: "LU-2" (voltage limit -2), torque voltage mode, target 0: the applied voltage must stay 0
+  {
+    AuditRec& r = rec(70);
+    model_motor(1, MotionControlType::torque, TorqueControlType::voltage, false);
+    cmd.motor(m, (char*)"LU-2");
+    float amax = 0;
+    for (int k = 0; k < 200; k++) { sim_loop(0.0f, 1); mot.w = 0; amax = fmaxf(amax, applied_amp()); }
+    r.cases++; if (amax > 0.01f) r.fails++;
+    worse(r, amax, m->voltage_limit, amax, m->voltage.q);
+  }
+  // 71: "LUnan" (atof gives NaN), target 10 V: the applied voltage must not exceed the previous limit 6 V
+  {
+    AuditRec& r = rec(71);
+    model_motor(1, MotionControlType::torque, TorqueControlType::voltage, false);
+    cmd.motor(m, (char*)"LUnan");
+    float amax = 0;
+    for (int k = 0; k < 200; k++) { sim_loop(10.0f, 1); mot.w = 0; amax = fmaxf(amax, applied_amp()); }
+    r.cases++; if (amax > 6.01f) r.fails++;
+    worse(r, amax - 6.0f, m->voltage_limit, amax, m->voltage.q);
+  }
+  // 72: "WT9" (modulation type 9, not a valid FOCModulationType), then target 2 V and back to 0
+  {
+    AuditRec& r = rec(72);
+    model_motor(1, MotionControlType::torque, TorqueControlType::voltage, false);
+    sim_loop(2.0f, 50);
+    cmd.motor(m, (char*)"WT9");
+    float amax = 0;
+    for (int k = 0; k < 200; k++) { sim_loop(0.0f, 1); mot.w = 0; amax = fmaxf(amax, applied_amp()); }
+    r.cases++; if (amax > 0.01f) r.fails++;
+    worse(r, amax, (float)(int)m->foc_modulation, amax);
+  }
+  // 73: "LC-1" (current limit -1), foc_current torque mode, target 0: the true current must stay ~0
+  {
+    AuditRec& r = rec(73);
+    model_motor(1, MotionControlType::torque, TorqueControlType::foc_current, false);
+    cmd.motor(m, (char*)"LC-1");
+    float imax = 0;
+    for (int k = 0; k < 600; k++) { sim_loop(0.0f, 1); mot.w = 0; imax = fmaxf(imax, fabsf(mot.iq)); }
+    r.cases++; if (imax > 0.05f) r.fails++;
+    worse(r, imax, m->current_limit, imax, m->current_sp);
+  }
+  // 74: "LV-5" (velocity limit -5), angle mode, target +3 rad: must still reach the target
+  {
+    AuditRec& r = rec(74);
+    model_motor(1, MotionControlType::angle, TorqueControlType::voltage, false);
+    cmd.motor(m, (char*)"LV-5");
+    sim_loop(3.0f, 8000);
+    float err = fabsf(m->shaft_angle - 3.0f);
+    r.cases++; if (err > 0.05f) r.fails++;
+    worse(r, err, m->velocity_limit, m->shaft_angle, mot.w);
+  }
+}
+
+
 void equiv_audit_setup() {
   memset(audit, 0, sizeof(audit));
   check_sincos();
@@ -724,6 +784,7 @@ void equiv_audit_setup() {
   check_stepper_openloop();
   check_lpf_pid();
   check_mode_change();
+  check_commander();
   audit_state.state = 1;
 }
 #else

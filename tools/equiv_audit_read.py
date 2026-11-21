@@ -67,6 +67,11 @@ CHECKS = {
     67: ("PID output ramp 100 /s respected", "output, previous, rate"),
     68: ("PID anti-windup: calls to leave the limit after the error reverses", "calls, output"),
     69: ("target after updateMotionControlType", "vel->angle, angle->vel, vel->torque, torque->angle_openloop"),
+    70: ("Commander LU-2 (negative voltage limit), target 0 V: applied voltage", "voltage_limit, max applied, voltage.q"),
+    71: ("Commander LUnan, target 10 V: applied voltage above the previous 6 V limit", "voltage_limit, max applied, voltage.q"),
+    72: ("Commander WT9 (invalid modulation), target 2 V then 0: applied voltage", "foc_modulation, max applied"),
+    73: ("Commander LC-1 (negative current limit), target 0 A: true current", "current_limit, max |iq|, current_sp"),
+    74: ("Commander LV-5 (negative velocity limit), angle mode +3 rad: error", "velocity_limit, shaft_angle, velocity"),
 }
 REC = "<3If4f"
 
