@@ -31,6 +31,11 @@ struct EquivResult {
   uint32_t reg_mismatch;   // PWM: register != (uint32_t)(dc * (ARR + 1)) for the new code
   float vbus;              // PWM: bus voltage read before starting the PWM
   float bad[10];           // first unexpected case: inputs then outputs
+  // PWM breakdown of the out of range duty cycles
+  uint32_t new_nan, new_above, dev_nan, dev_above; // dc NaN; dc > 1 or register > ARR + 1 (above 100 %)
+  uint32_t normal_max_diff;  // largest register difference with a normal supply (>= FLT_MIN, not denormal)
+  uint32_t subnormal_cases;  // phases computed with a denormal supply (0 < Vps < FLT_MIN)
+  float above[10];           // first new duty cycle above 100 %
 };
 
 volatile uint32_t equiv_progress = 0;
@@ -170,11 +175,23 @@ static void run_pwm(EquivResult& r, BLDCDriver* drv, float* dc[3], int handle_id
       if (reg != (uint32_t)(d_new * arr1)) r.reg_mismatch++;
       if (isnan(d_new) || d_new < 0.0f || d_new > 1.0f || reg > arr1) r.new_out_of_range++;
       if (isnan(d_dev) || d_dev < 0.0f || d_dev > 1.0f || reg_dev > arr1) r.dev_out_of_range++;
+      if (isnan(d_new)) r.new_nan++;
+      if (isnan(d_dev)) r.dev_nan++;
+      if (d_dev > 1.0f || reg_dev > arr1) r.dev_above++;
+      if (d_new > 1.0f || reg > arr1) {
+        if (r.new_above == 0) {
+          float b[10] = {vps, vl, U[j], d_dev, d_new, (float)reg_dev, (float)reg, (float)arr1, (float)j, 0};
+          memcpy(r.above, b, sizeof(b));
+        }
+        r.new_above++;
+      }
+      if (vps > 0.0f && vps < 1.17549435e-38f) r.subnormal_cases++;
       if (!same(d_new, d_dev) || reg != reg_dev) all_same = false;
       uint32_t diff = reg > reg_dev ? reg - reg_dev : reg_dev - reg;
       bool valid = vps > 0.0f;   // supply set and positive (NaN, 0, negative, NOT_SET: invalid)
       if (valid) {
         if (diff > r.max_count_diff) r.max_count_diff = diff;
+        if (vps >= 1.17549435e-38f && diff > r.normal_max_diff) r.normal_max_diff = diff;
         if (diff == 1) r.one_count++;
         if (diff > 1) bad = true;
       } else if (reg != 0 || d_new != 0.0f) {

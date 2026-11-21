@@ -18,7 +18,7 @@ from board_mem import elf_symbols  # noqa: E402
 MAGIC = 0xE0E0A002
 FIELDS = ["magic", "state", "cases", "identical", "expected", "unexpected", "new_out_of_range", "dev_out_of_range",
           "max_count_diff", "one_count", "reg_mismatch"]
-FMT = "<11If10f"
+FMT = "<11If10f6I10f"
 STATES = {0: "running", 1: "done", 2: "REFUSED (bus voltage > 10 V: switch the main supply off)", 3: "driver init FAILED"}
 BAD = {"equiv_pid": ["P", "I", "D", "error", "error_prev", "limit", "ramp", "Ts", "out_dev", "out_new"],
        "equiv_pwm6": ["Vps", "Vlimit", "U", "dc_dev", "dc_new", "reg_dev", "reg_new", "ARR+1", "phase", "-"],
@@ -46,7 +46,10 @@ def main():
             for n, addr in present.items():
                 addr = addr[0] if isinstance(addr, tuple) else addr
                 v = struct.unpack(FMT, bytes(target.read_memory_block8(addr, size)))
-                res[n] = (dict(zip(FIELDS + ["vbus"], v[:12])), v[12:])
+                d = dict(zip(FIELDS + ["vbus"], v[:12]))
+                d.update(zip(["new_nan", "new_above", "dev_nan", "dev_above", "normal_max_diff", "subnormal"], v[22:28]))
+                d["above"] = v[28:38]
+                res[n] = (d, v[12:22])
             if any(r["magic"] != MAGIC for r, _ in res.values()):
                 states = "not started"
             else:
@@ -63,6 +66,12 @@ def main():
             print(f"   bus {r['vbus']:.2f} V, max register difference (valid supply) {r['max_count_diff']}, "
                   f"one count {r['one_count']}, duty out of [0,1] new {r['new_out_of_range']} / dev "
                   f"{r['dev_out_of_range']}, register != dc*(ARR+1) {r['reg_mismatch']}")
+        if n != "equiv_pid":
+            print(f"   dc NaN new {r['new_nan']} / dev {r['dev_nan']}, ABOVE 100 % new {r['new_above']} / dev "
+                  f"{r['dev_above']}, max register difference with a normal supply {r['normal_max_diff']}, "
+                  f"phases with a denormal supply {r['subnormal']}")
+            if r["new_above"]:
+                print("   first new above 100 %:", ", ".join(f"{k}={v:g}" for k, v in zip(BAD[n], r["above"])))
         if r["unexpected"]:
             print("   first unexpected:", ", ".join(f"{k}={v:g}" for k, v in zip(BAD[n], bad)))
 
