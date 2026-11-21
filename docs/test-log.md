@@ -1172,3 +1172,19 @@ D = 1e-6 on the 3 PIDs (perf_run --extra MQD0.000001 MDD0.000001 MVD0.000001, de
 data/2026-11-21/perf_pid_dset.csv): dev loopFOC 304.9 / move 84.3 / total 442.3 us, PID branch 307.5 / 85.9 /
 446.2 us: **+3.9 us (+0.9 %) when D is set** (~1.3 us per PID, more than the 0.5 us estimated from one compare).
 Dev itself is 10.6 us slower with D = 1e-6 than with D = 0: libgcc multiply/divide take a fast path on a zero operand.
+
+## 2026-11-21 - On-target equivalence tests (src/equiv, tools/equiv_read.py)
+
+PR code linked in a test firmware vs a verbatim copy of dev, real compiler and libgcc. The same firmware linked with
+dev gives 100 % identical (checks the copies). Board fed by the ST-Link 3.3 V only for the PWM tests (main supply
+off: ~2 V on the bus with a multimeter, firmware reads 1.9-5.6 V; gate drivers need 12-15 V).
+
+- **PID** (6f0f96c, 2 M cases incl. 0, -0, +-inf, NaN, NOT_SET, random bit patterns): identical 1941006, expected
+  58994 (D == 0 with NaN in dev or signed zero), unexpected 0.
+- **setPwm d41eef5** (500 k cases per driver, 6PWM on TIM1 motor pins, 3PWM on PC6-PC8, registers read back):
+  normal supply: at most 1 timer count, never above 100 %. **Bug found**: supply below ~3e-39 (denormal), 1/Vps
+  overflows to inf: register 65535 (> ARR+1 = 2000, i.e. 100 % or more) in 6 (6PWM) / 8 (3PWM) phases; dev stayed
+  bounded. Not seen on the PC test (no denormal supply in its special values).
+- **setPwm 15254e1** (fix: `inv_supply < INFINITY` in the condition, else no voltage): unexpected 0, max 1 count with
+  a valid supply, register always == dc * (ARR+1). dc can exceed 1 by one ulp with a supply ~3e38 V (4 phases):
+  register 2000 = ARR+1, the same as dev. Flash -40 B vs dev (was -56 B). Loop time with the guard: to measure.
