@@ -114,6 +114,9 @@ static void vec(float& amp, float& ang) {
 }
 
 // ---------------------------------------------------------------- 4-5: open loop angle mode, negative angles
+struct Dbg { float shaft, el, vq, ua, ub, uc, amp, k; };
+Dbg dbg[30];
+uint32_t n_dbg = 0;
 static void check_openloop() {
   AuditRec& neg = rec(4);   // voltage vector amplitude while the target angle is negative
   AuditRec& pos = rec(5);   // same, positive
@@ -126,6 +129,8 @@ static void check_openloop() {
     m->move(target);
     float amp, ang;
     vec(amp, ang);
+    if (k >= 2990 && k < 3020 && n_dbg < 30)
+      dbg[n_dbg++] = {m->shaft_angle, m->electrical_angle, m->voltage.q, fdriver.Ua, fdriver.Ub, fdriver.Uc, amp, (float)k};
     AuditRec& r = m->shaft_angle < 0 ? neg : pos;
     float err = fabsf(amp - m->voltage_limit);
     r.cases++; if (err > 0.05f) r.fails++;
