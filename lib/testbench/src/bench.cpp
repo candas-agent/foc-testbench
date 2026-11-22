@@ -57,6 +57,12 @@ static void hallB() { hall.handleB(); hallLog(); }
 static void hallC() { hall.handleC(); hallLog(); }
 #endif
 int sensor_aligned = 0;
+#ifdef HALL_A_PIN
+// XG<state>[,<loops>]: invalid hall state injected for some loops (hall_glitch.cpp, docs/audit-dev.md #10)
+void hall_glitch_set(HallSensor& h, int state);
+void hall_glitch_restore(HallSensor& h);
+static volatile int glitch_pending = 0, glitch_state = 0, glitch_loops = 1, glitch_left = 0;
+#endif
 
 volatile DebugVars dbg;
 float openloop_voltage = OPENLOOP_VOLTAGE;
@@ -524,6 +530,17 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+#ifdef HALL_A_PIN
+    case 'G': {  // XG0 / XG7[,loops]: invalid hall state 000 / 111 for 1 (or <loops>) control loops
+      int st = hasArg(cmd + 1) ? atoi(cmd + 1) : 0;
+      const char* c2 = strchr(cmd + 1, ',');
+      int n = c2 ? atoi(c2 + 1) : 1;
+      if (st != 0 && st != 7) st = 0;
+      glitch_state = st; glitch_loops = n < 1 ? 1 : (n > 100 ? 100 : n); glitch_pending = 1;
+      bench_io.print(F("hall glitch: state ")); bench_io.print(st); bench_io.print(F(", loops ")); bench_io.println(glitch_loops);
+      return;
+    }
+#endif
     case 'O':  // XO: re-centre the offsets (open loop, 0 V, enabled); XO<da>,<db>: shift the measured ia, ib by da, db [A]
       if (hasArg(cmd + 1)) {
         float da = (float)atof(cmd + 1);
@@ -700,6 +717,10 @@ static void bench_step_impl(bool profiled) {
   }
   motor.feed_forward_current.q = (motor.controller == MotionControlType::velocity)
       ? friction_ff_a * _constrain(motor.target / 0.5f, -1.0f, 1.0f) : 0.0f;
+#ifdef HALL_A_PIN
+  if (glitch_pending) { hall_glitch_set(hall, glitch_state); glitch_left = glitch_loops; glitch_pending = 0; }
+  else if (glitch_left && --glitch_left == 0) hall_glitch_restore(hall);
+#endif
   motor.loopFOC();
   LAP(P_FOC);
   motor.move();

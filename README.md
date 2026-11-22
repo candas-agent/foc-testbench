@@ -64,7 +64,7 @@ the project builds on any machine. Only `lib/qfplib` (GPL, envs `*_qfp`) has to 
 - `ALIGN_VOLTAGE` 0.8 V (≈1.5 A on this board, see the test log); DC link voltage gain 29.3 (calibrated on one board, EFeru's default calibration gives 33).
 - Do not add `-D SIMPLEFOC_STM32_ADC_INTERRUPT` with SimpleFOC dev: the F1 HAL disables the injected interrupt and the currents freeze (fixed in [simplefoc/Arduino-FOC#594](https://github.com/simplefoc/Arduino-FOC/pull/594)).
 - Velocity PI that works on this slower loop (~400 µs): `MVP0.4`, `MVI1`, `MVF0.01`.
-- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
+- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `XG0` / `XG7[,loops]` invalid hall state 000 / 111 injected for 1 (or n) control loops (test of docs/audit-dev.md #10), `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
 
 ### Safety
 
