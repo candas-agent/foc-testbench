@@ -542,6 +542,29 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+    case 'M': {  // XM<volt>[,<comp V>]: characteriseMotor(volt, 1.5) as the SimpleFOC command MFP, optionally with the
+                 // dead-time compensation forced along +d (the measurement only applies positive d voltages; loopFOC,
+                 // which normally gives the current direction, does not run during the measurement)
+      float v = hasArg(cmd + 1) ? (float)atof(cmd + 1) : 0.8f;
+      const char* c2 = strchr(cmd + 1, ',');
+      float comp = c2 ? (float)atof(c2 + 1) : 0.0f;
+#ifndef BENCH_NO_DEADTIME
+      float comp_prev = motor.deadtime_compensation;
+      motor.deadtime_compensation = comp;
+      motor.deadtime_comp_current = {10.0f, 0.0f};
+#else
+      if (comp != 0.0f) bench_io.println(F("no dead-time compensation in this build: measured without"));
+#endif
+      int res = motor.characteriseMotor(v, 1.5f);
+#ifndef BENCH_NO_DEADTIME
+      motor.deadtime_compensation = comp_prev;
+#endif
+      bench_io.print(F("characterise: result ")); bench_io.print(res);
+      bench_io.print(F(", R [Ohm] ")); bench_io.print(motor.phase_resistance, 4);
+      bench_io.print(F(", Ld [mH] ")); bench_io.print(motor.axis_inductance.d * 1000.0f, 4);
+      bench_io.print(F(", Lq [mH] ")); bench_io.println(motor.axis_inductance.q * 1000.0f, 4);
+      return;
+    }
     case 'K':  // XK0..XK3: voltage feed-forward mode (see ff_mode)
       if (hasArg(cmd + 1)) ff_mode = atoi(cmd + 1);
       if (ff_mode < 0 || ff_mode > 3) ff_mode = 0;
