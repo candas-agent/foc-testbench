@@ -1345,3 +1345,7 @@ duty cycle registers excluded), envs `gd32drv_dev` (Candas1 dev-gd32 947a0a2) an
   analog, PA5-PA7 inputs) but **any `analogRead` / `pinMode` through the core's pinmap can corrupt the AF of the
   next pins of the same AFSEL register**: worth reporting to CommunityGD32Cores (PinNames.h comment says AF = bits 15:18).
 - Dead time read back: CCHP 0x983C (DTCFG 60 cycles) in both. Motor not run yet.
+- **Motor running (26 V, Vbus 25.80 V read after a software reset, ST-Link 3.3 V disconnected), PR firmware
+  `gd32drv_pr` 583bfb4**: open loop 1.2 V, 0.5 rad/s, 6 s: fundamental 0.679 / 0.706 A (18/11, same test:
+  0.70 A), peak 1.44 A, sensor - open loop angle spread 7.3 deg el. Current mode 1 A, 2 rad/s, 6 s: iq 0.995 A,
+  id 0.004 A, fundamental 1.000 / 0.969 A (18/11: iq 1.000 A, id ~0). No fault. Same behaviour as dev-gd32.
