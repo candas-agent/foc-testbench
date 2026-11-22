@@ -823,7 +823,7 @@ static void readVbusRuntime() {
   else vbus_rt = v * BENCH_VBUS_RUNTIME_GAIN;
 #ifdef BENCH_VBUS_RUNTIME_ALT_PIN
   if (v >= 0 && fabsf(v * BENCH_VBUS_RUNTIME_GAIN - dbg.vbus) > 0.1f * dbg.vbus) vbus_alt_bad++;
-#ifdef BENCH_VBUS_RUNTIME_ANALOGREAD
+#if defined(BENCH_VBUS_RUNTIME_ANALOGREAD) || defined(BENCH_VBUS_RUNTIME_ALT_ANALOGREAD)
   vbus_alt = analogRead(BENCH_VBUS_RUNTIME_ALT_PIN) / 1023.0f * 3.3f;
 #else
   vbus_alt = _readRegularADCVoltage(BENCH_VBUS_RUNTIME_ALT_PIN);
