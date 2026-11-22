@@ -1422,3 +1422,23 @@ Stale value check (`BENCH_VBUS_RUNTIME_ALT_PIN` PB1, ~1.64 V, read right after V
 - **To check on the STM32F103 (SimpleFOC dev)**: `_readRegularADCVoltage` waits with `HAL_ADC_PollForConversion`
   (EOC): same stale value test with two pins (the 19/11 test read only one pin at a constant voltage).
 - Vbus: 25.92 V with the 12 bit value, 25.80 V with analogRead (the core's 12 -> 10 bit mapping rounds down).
+
+### More tests of the two GD32 PRs (same evening, 26 V unless stated)
+
+- **Loop time** (`tools/loop_time.py`, current mode 1 A 2 rad/s, XP x5, data/2026-11-22_gd32drv/loop_time.csv):
+  dev-gd32 loopFOC 174.2 / total 218.7 us; PR #25 174.1 / 218.6 us (unchanged). PR #26 with one read every 20 ms:
+  total avg 230.0, max 1209 us; two reads every loop: total avg 1793, max 9027 us. analogRead every 20 ms on
+  dev-gd32: total avg 228.4, max 996 us. **One read (core path) ~0.8 ms**: PC sampling (two reads every loop, motor
+  disabled): 83 % in the slow flash (>= 0x08008000), pin_function 35 % (pinMode at each read), pinmap_find_peripheral
+  11 %, pinmap_find_function 11 %, get_adc_value 11 %, pin_in_pinmap 7 %. Split_Hoverboard_SimpleFOC calls
+  battery.update() (GenericVoltageSense -> analogRead, not rate limited) at every loop: probably +0.8 ms per loop.
+- **PWM 20 / 25 kHz** (DEAD_ZONE 0.01667 / 0.02084, motor disabled): CAR 0x708 / 0x5A0 = 20000 / 25000 Hz,
+  dead time 60 cycles, CH3CV / CAR = 0.980 in both.
+- **First regular read after currentSense.init(), motor running** (gd32drv_adc_late: no start-up analogRead, reads
+  only while enabled): iq 1.000 / 0.997 A, ia / ib 1.007 / 0.978 and 1.015 / 0.995 A, 610 reads, 0 errors, no fault.
+- **Bus voltage at 20 / 23 / 26 V** (reset after each change, motor disabled): analogRead at start-up 19.97 / 22.99 /
+  25.82 V, `_readRegularADCVoltage` 20.08 / 23.08 / 25.95 V (12 bit; the core's 10 bit mapping rounds down).
+- **dead_zone 0.01 = 45 cycles** (Split_Hoverboard_SimpleFOC value, CCHP 0x982D): supply current (supply display)
+  0.04 A motor disabled, 0.08 A motor enabled at 0 V for 25 s with 60 cycles and the same 0.08 A with 45 cycles:
+  no measurable shoot-through. Open loop 1.2 V 0.5 rad/s: fundamental 0.940 / 0.948 A (60 cycles: 0.648 / 0.670 A,
+  90 cycles: 0.424 / 0.331 A). No fault.
