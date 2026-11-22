@@ -1259,3 +1259,13 @@ loopFOC passes last_loopfoc_timestamp_us. On-target scenarios (equiv_foc_dev vs 
 cases identical to dev bit for bit** (the first version differed in 9). Loop time (perf_run 2 rad/s, dev / v2
 alternated twice, cloud run 45025816596; data/2026-11-22/perf_dtv2.csv): loopFOC 297.15 -> 290.45 us (**-6.7 us,
 -2.3 %**; first version -6.1 %), total 431.6 -> 425.9 us. Flash +56 B, RAM same.
+
+## 2026-11-22 - simplefoc#596 v3 (per-object times, one dt conversion per loop, dev rules)
+
+candas-agent perf/loopfoc-dt-once-v3 (b7c0e17): each current filter / controller keeps the time of its last call
+(also in dc_current, estimated_current and monitor()), the rules of operator() applied to the elapsed time, one
+conversion to seconds shared when the elapsed microseconds are equal. On-target scenarios: **all 18 identical to
+dev**. Loop time (cloud run 45027774655, dev / v2 / v3 alternated twice; data/2026-11-22/perf_dtv3.csv): loopFOC
+dev 297.2, v2 290.25 (-2.3 %), **v3 289.8 (-2.5 %)**. Flash: v2 +56 B, v3 +424 B (RAM +24 B). Sharing the
+conversion brings nothing measurable: the extra gain of the first version (279 us) came from skipping the per-object
+rules, which is exactly what changed the behaviour.
