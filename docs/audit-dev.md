@@ -54,6 +54,21 @@ state currents, sensor mounted either way, true zero electric angle 0.7 rad.
 Also reported by others and not retested here: current sense alignment swaps (#573, #574, #575), HallSensor
 uninitialised state (#577), `motion_downsample` off by one and `characteriseMotor` correction factor (#572).
 
+## Reproduced on the powered board (2026-11-22)
+
+`tools/bug_repro.py` (motor moves, low values), details in [test-log.md](test-log.md) (22/11). Applied duty cycles read
+from the timer registers.
+
+- **#11 negative limits**: `MLU-0.5` -> 0.5 V applied whatever the target, and again after `ME0` / `ME1`; `MLC-0.3`
+  -> the motor accelerated alone at target 0 and reached 10 rad/s with a negative target (aborted). **Stuck target:
+  yes. `ME0` always stops, but the next `ME1` applies the same voltage again** until a valid limit is set.
+- **#12 `MWT9`**: duties frozen at the last voltage whatever the target; **re-applied at the next `ME1`**.
+- **#1-2 angle open loop, negative target**: duty spread 0 % (no voltage) below -PI/2 electrical.
+- **#10 hall glitch**: seen in the recording, small current effect at 1 rad/s (within the R_ds_on noise).
+- **simplefoc#596**: back from `dc_current` after 0.1 s, **iq 1.79 A and -1.26 A (wrong direction) for 8-19 ms for a
+  0.2 A target**; dev at most 0.85 A for single samples. Confirms "do not merge as is".
+- Not conclusive: `MLV-2` in angle mode (0.6 V does not start the motor).
+
 ## Checked correct
 
 - `_sin` / `_cos` on [0, 2PI] (1.6e-4), sine and SVPWM vectors (centred or not), centred trapezoid, `getFOCCurrents`
