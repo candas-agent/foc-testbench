@@ -1369,3 +1369,29 @@ duty cycle registers excluded), envs `gd32drv_dev` (Candas1 dev-gd32 947a0a2) an
   pinMode OUTPUT before _configure6PWM, all platforms): on this board the low sides are active low -> the low side
   MOSFETs of the valid pins would be ON (motor braked, high sides off, no shoot-through). Pre-existing SimpleFOC
   behaviour, to keep in mind.
+
+## 2026-11-22: GD32F1x0 `_readRegularADCVoltage` (candas-agent feat/gd32-regular-adc), bus voltage at run time
+
+Same API as SimpleFOC dev on STM32 (68120bf): one regular conversion started by software on the current sense ADC.
+Bench: `BENCH_VBUS_RUNTIME_PIN` PA4 every 20 ms (gain 31), now also on GD32; `BENCH_VBUS_RUNTIME_ANALOGREAD` reads
+with the core's analogRead instead (as GenericVoltageSense in Split_Hoverboard_SimpleFOC). Vbus at start-up still
+read with analogRead. 26 V, current mode 1 A, 2 rad/s, 6 s (data/2026-11-22_gd32drv/*.csv):
+
+| firmware | run time read | ADC CTL1.CTN | reads / errors | Vbus run time | iq | ia / ib fundamental |
+|---|---|---|---|---|---|---|
+| first version e01df09 (gd32drv_adc, run 45069616983) | `_readRegularADCVoltage` | 1 | 1103 / 0 | 25.82 V | **0.878 A** | **0.000** / 1.555 A, peak 2.48 A |
+| same, CTN cleared by SWD before the run | `_readRegularADCVoltage` | 0 | 5144 / 0 | 25.90 V | 1.002 A | 1.022 / 0.983 A |
+| dev-gd32 (gd32drv_ar_dev) | analogRead | 1 | 680 / 0 | 25.80 V | 1.007 A | 1.020 / 0.972 A |
+| fixed 7dee891 (gd32drv_ar_fix) | analogRead | 0 | 691 / 0 | 25.80 V | 1.003 A | 1.002 / 0.975 A |
+| fixed 7dee891 (gd32drv_adc) | `_readRegularADCVoltage` | 0 | 683 / 0 | 25.90 V | 1.000 A | 1.012 / 0.985 A |
+
+- The core's first analogRead (start-up Vbus) enables the ADC continuous mode (CTL1 bit 1). With it, the 1.5 cycle
+  regular conversion of `_readRegularADCVoltage` ran back to back and **IDATA0 (first injected channel, phase A)
+  stayed at 0x800** while IDATA1 was updated. analogRead (7.5 cycles) with the continuous mode on was fine, so the
+  Split_Hoverboard_SimpleFOC sketch (GenericVoltageSense at run time) is not affected. Exact mechanism not found.
+- Fix: continuous mode off in `_configureADCLowSide` (as the STM32 current sense `_adc_init`) and before each
+  `_readRegularADCVoltage` conversion. Cost: +8 B for the fix, `_readRegularADCVoltage` 284 B.
+- Vbus: 25.90 V with the regular read (1.5 cycles), 25.80 V with analogRead (7.5 cycles), supply 26.0 V; the
+  short sampling reads 0.4 % higher on this divider.
+- STM32 for comparison (SimpleFOC dev): `_adc_init` (current sense ADC) sets ContinuousConvMode DISABLE, but
+  `_adc_init_regular` (an ADC not used by the current sense) sets ENABLE.
