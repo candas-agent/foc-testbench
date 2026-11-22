@@ -1442,3 +1442,21 @@ Stale value check (`BENCH_VBUS_RUNTIME_ALT_PIN` PB1, ~1.64 V, read right after V
   0.04 A motor disabled, 0.08 A motor enabled at 0 V for 25 s with 60 cycles and the same 0.08 A with 45 cycles:
   no measurable shoot-through. Open loop 1.2 V 0.5 rad/s: fundamental 0.940 / 0.948 A (60 cycles: 0.648 / 0.670 A,
   90 cycles: 0.424 / 0.331 A). No fault.
+
+## 2026-11-22: sampling point sweep, GD32F130 split board (R_ds_on low side current sense, PR #25 firmware)
+
+`tools/sampling_sweep.py`: the driver's `sampling_point` (TIMER0 CH3, fraction of the PWM period, center-aligned
+counting down) written through SWD, motor disabled, then open loop voltage mode 0.5 rad/s for 4 s (currents only
+measured). 26 V, 16 kHz (CAR 2250 ticks at 72 MHz: 0.01 of the period = 0.3125 us), SVPWM, 60 cycles dead time.
+data/2026-11-22_gd32drv/sampling_sweep*.csv. Reference: 0.65-0.70 A at 1.2 V, 1.31-1.39 A at 1.5 V.
+
+- Coarse, 1.2 V: 0.40-0.55 wrong (up to 13 A read, bench overcurrent cut, fault 2); 0.60 to 0.995 all correct with the
+  same noise (residual 0.15-0.23 A).
+- Fine: first correct value ia / ib: 1.2 V: <= 0.555 / 0.565; 1.5 V: 0.565 / 0.575.
+- SVPWM peak duty 0.5 + 0.866 U / Vbus = 0.540 (1.2 V), 0.550 (1.5 V): the limit moves with it. Time left before the
+  low side MOSFET turns off, after the ADC trigger: **ia (first injected conversion) >= 0.47 us, ib (second) >= 0.78 us**
+  (resolution 0.16 us).
+- Split_Hoverboard_SimpleFOC: driver.voltage_limit 0.95 Vbus caps the duty at 0.95: with sampling_point 0.98, 0.94 us
+  left > 0.78 us, the currents stay valid at full voltage (motor.voltage_limit 0.58 Vbus = SVPWM linear limit). The
+  margin is in us: at 25 kHz 0.03 of the period is 0.6 us < 0.78 us (lower driver.voltage_limit or sampling_point
+  0.99-0.995, both measured correct). Only tested at 0.7-1.3 A; ringing at higher currents not seen (oscilloscope).
