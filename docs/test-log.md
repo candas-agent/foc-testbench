@@ -1395,3 +1395,30 @@ read with analogRead. 26 V, current mode 1 A, 2 rad/s, 6 s (data/2026-11-22_gd32
   short sampling reads 0.4 % higher on this divider.
 - STM32 for comparison (SimpleFOC dev): `_adc_init` (current sense ADC) sets ContinuousConvMode DISABLE, but
   `_adc_init_regular` (an ADC not used by the current sense) sets ENABLE.
+
+### Later the same evening: stale values, continuous mode, final version based on the core's analogRead path
+
+Stale value check (`BENCH_VBUS_RUNTIME_ALT_PIN` PB1, ~1.64 V, read right after Vbus PA4 at every loop,
+`BENCH_VBUS_RUNTIME_MS` 0; a read counted wrong when Vbus is off by >10 % or the alt pin reads the Vbus value):
+
+| version | reads, motor disabled | wrong | current mode 1 A, motor running | wrong | iq, ia / ib |
+|---|---|---|---|---|---|
+| own conversion, wait for EOC (8cffeb8) | 11874 | **11625** (values swapped) | | | |
+| own conversion, EOC without EOIC, CTN off at init (f882ade) | 11810 | 0 | 53323 | 0 | 0.989, 0.999 / 1.000 A |
+| analogRead on two pins, CTN off at init (f882ade) | 7350 | **7014** | | | |
+| own conversion, CTN off/on around it (60224bb) | | | 11373 | 3 | 0.998, **0.929 / 1.191 A** |
+| analogRead on two pins, dev-gd32 | 10046 | 0 | 8661 / 17317 | **3 / 8** | 1.006 / 1.002 A |
+| final (fac18af / e988cf8): `get_adc_value` of the core | 6097 | 0 | 19841 | 4 | 0.998, 1.006 / 0.953 A |
+| final, mixed with analogRead on PB1 | 6247 | 0 | 7009 | 0 | 1.002, 1.008 / 0.982 A |
+
+- EOC is also set at the end of the injected group (with EOIC): waiting for EOC alone returns the previous regular
+  result. The core's analogRead does not clear EOC before its trigger and relies on the continuous mode (set by its
+  first call) to return the right channel; with the continuous mode off, analogRead of two pins swaps the values.
+- Writing CTL1 while the ADC is on probably starts a conversion (as ADON on STM32F1): turning the continuous mode
+  back on restarted 1.5 cycle continuous conversions and disturbed the currents (not proven).
+- Final choice (with the user): `_readRegularADCVoltage` = the core's `get_adc_value` (analogRead path, 12 bit,
+  without the analogRead resolution). Rules documented: first read (any pin) before `currentSense.init()`; rare wrong
+  reads with the motor running (~0.02-0.05 %, same with analogRead on dev-gd32): filter before acting on a value.
+- **To check on the STM32F103 (SimpleFOC dev)**: `_readRegularADCVoltage` waits with `HAL_ADC_PollForConversion`
+  (EOC): same stale value test with two pins (the 19/11 test read only one pin at a constant voltage).
+- Vbus: 25.92 V with the 12 bit value, 25.80 V with analogRead (the core's 12 -> 10 bit mapping rounds down).
