@@ -1232,3 +1232,21 @@ PID anti-windup, updateMotionControlType targets OK.
 Audit part 4 (Commander::motor() on the simulated motor): MLU-2 -> 2 V applied at target 0; MLUnan -> 10 V applied
 (limit was 6 V); MWT9 (invalid modulation) -> last 2 V stay applied at target 0; MLC-1 -> 1.04 A at target 0 A;
 MLV-5 in angle mode -> runs the wrong way (-11 rad for +3). No validation of the values (atof, enum cast).
+
+## 2026-11-22 - Bugs of docs/audit-dev.md reproduced on the powered STM32F103 board
+
+tools/bug_repro.py (THE MOTOR MOVES, low values, abort above 3 A / 10 rad/s), bench firmware perf_dev_f103 (dev) and
+perf_dt596_f103 (simplefoc#596), cloud run 45023777514; data/2026-11-22/. New bench commands: `XR1` plain SimpleFOC
+(the bench no longer sets the voltage limit every loop nor forces foc_current in closed loop), `XG0`/`XG7[,n]` invalid
+hall state injected for n loops (hall state recorded in the comp_a column of the recorder). Applied duty cycles read
+from the TIM1 compare registers (spread between phases, % of the period).
+
+| Case | What happens on the board |
+|---|---|
+| #11 `MLU-0.5`, torque voltage mode | 0.5 V applied (duty spread 3.35 %) **whatever the target** (+0.3, -0.3, 0): the target is ignored. `ME0` stops it (0 %); **`ME1` again applies 0.5 V again**; only a valid `MLU` restores. Motor did not turn (0.5 V below the friction torque) |
+| #11 `MLC-0.3`, foc_current | uq stuck at ~0.63 V whatever the target. Earlier run with the bench voltage limit (4 V): **the motor accelerated alone at target 0 (6 rad/s), reached 10 rad/s with target -0.2 (aborted)** |
+| #12 `MWT9` | **duties frozen** at the last 0.4 V (2.65 %) for target 0 and -0.4; `ME0` gives 0 %; **`ME1` with target 0 re-applies the old 0.4 V**; `MWT1` restores |
+| #1-2 angle open loop, target -0.6 rad (0.3 V) | electrical angle -9.0 .. -4.7 rad: **duty spread 0.00 % (no voltage at all)**; partial between -PI/2 and 0; back to normal for a positive target |
+| #11 `MLV-2`, angle mode | not conclusive: 0.6 V does not start the motor (simulation result stands) |
+| #10 hall glitch `XG0` / `XG7` / `XG0,5` at 1 rad/s, foc_current | glitch visible in the recording; iq dips (to ~-0.2 A for 5 loops) within the R_ds_on noise: small effect at this speed and current |
+| #596 dc_current -> foc_current after 0.1 s, target 0.2 A | **PR: iq 1.79 A (8 ms above 0.5 A from the target) and -1.26 A the second time (19 ms, wrong direction)**; dev: at most 0.85 A for single samples |

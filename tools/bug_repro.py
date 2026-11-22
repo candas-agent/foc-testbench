@@ -144,7 +144,7 @@ def main():
                 if c == "+3":   # target relative to the present angle (angle mode)
                     # shaft angle is not in dbg: use the target set by MC2 (the present angle) + 3
                     import re
-                    m_ = re.search(r"Target:\s*(-?[\d.]+)", cmd("M", 0.6))
+                    m_ = re.search(r"angle:\s*(-?[\d.]+)", cmd("MMG6", 0.6))
                     if not m_:
                         raise RuntimeError("could not read the present target")
                     cur = float(m_.group(1))
