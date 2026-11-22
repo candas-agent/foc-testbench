@@ -1274,3 +1274,16 @@ rules, which is exactly what changed the behaviour.
 
 perf_run 2 rad/s, dev / setPwm alternated twice (cloud run 44881317795; data/2026-11-22/perf_setpwm_guard.csv):
 loopFOC 296.95 -> 289.45 us (**-7.5 us, -2.5 %**; -3.0 % before the guard). Flash -40 B. PR description updated.
+
+## 2026-11-22 - Voltage feed-forward in foc_current (bench XK, tools/ff_test.py)
+
+XK1 back-EMF (estimateBEMF from KV 17: 0.324 V per rad/s), XK2 + R * current setpoint, XK3 + dq decoupling
+(L 0.37 mH); computed before each loopFOC into feed_forward_voltage. Cloud run 45031765116 (perf_dev_f103).
+- Velocity steps 0 -> +-3 -> 0 rad/s (PI P 0.4 I 1 Tf 0.01, tuned without feed-forward), 2 rounds alternated;
+  data/2026-11-22/ff.csv: **worse with feed-forward**: overshoot 58 % (off) -> 101 / 91 / 97 % (XK1/2/3), velocity
+  not settled after 1 s (|end error| 0.02 -> 0.29 / 0.12 / 0.21 rad/s), iq tracking error RMS 0.22 -> 0.38 / 0.30 /
+  0.36 A. The faster current response changes the plant seen by the velocity PI: it would need retuning.
+- Back-EMF measured at steady speed (no feed-forward): (uq - R iq) / w = 0.46 (2 rad/s) / 0.40 (4 rad/s), slope
+  0.354 V per rad/s + ~0.2 V fixed (dead time): the KV estimate (0.324) is ~9 % low, not the cause.
+- Torque mode +-0.2 A steps: the motor does not move (static friction), back-EMF term 0; iq error RMS 0.153 (off) /
+  0.144 / 0.139 A (within the R_ds_on noise). +-0.4 A accelerated past 9 rad/s in 0.45 s (aborted by the tool).
