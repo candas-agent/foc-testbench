@@ -115,6 +115,9 @@ static bool isOpenLoop() {
 // XR1: plain SimpleFOC behaviour for bug reproduction (docs/audit-dev.md): the bench no longer sets the voltage
 // limit every loop nor forces foc_current in closed loop. XR0 (default) restores the bench behaviour.
 static int raw_simplefoc = 0;
+// XK<n>: voltage feed-forward in foc_current, computed before each loopFOC (feed_forward_voltage, SimpleFOC dev):
+// 0 off, 1 back-EMF (estimateBEMF, from KV), 2 + R * current setpoint, 3 + dq decoupling (L * electrical speed)
+static int ff_mode = 0;
 
 static void updateVoltageLimit() {
   if (raw_simplefoc) return;
@@ -209,7 +212,7 @@ static void rec_update() {
 #else
   rec_buf[rec_n].comp_a = dbg.comp_a;
 #endif
-  rec_buf[rec_n].angle_err = dbg.angle_err;
+  rec_buf[rec_n].angle_err = observer_on ? dbg.angle_err : motor.current_sp;  // observer off: current setpoint
   rec_buf[rec_n].iq = motor.current.q;
   rec_buf[rec_n].en = motor.enabled ? 1.0f : 0.0f;
   if (++rec_n >= RECORD_SAMPLES) {
@@ -539,6 +542,12 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+    case 'K':  // XK0..XK3: voltage feed-forward mode (see ff_mode)
+      if (hasArg(cmd + 1)) ff_mode = atoi(cmd + 1);
+      if (ff_mode < 0 || ff_mode > 3) ff_mode = 0;
+      if (ff_mode == 0) motor.feed_forward_voltage = {0.0f, 0.0f};
+      bench_io.print(F("voltage feed-forward mode: ")); bench_io.println(ff_mode);
+      return;
     case 'R':  // XR1 / XR0: plain SimpleFOC limits and torque modes (bug reproduction) / bench behaviour
       if (hasArg(cmd + 1)) raw_simplefoc = atoi(cmd + 1) ? 1 : 0;
       bench_io.print(F("plain SimpleFOC mode: ")); bench_io.println(raw_simplefoc);
@@ -730,6 +739,19 @@ static void bench_step_impl(bool profiled) {
   }
   motor.feed_forward_current.q = (motor.controller == MotionControlType::velocity)
       ? friction_ff_a * _constrain(motor.target / 0.5f, -1.0f, 1.0f) : 0.0f;
+  if (ff_mode && motor.torque_controller == TorqueControlType::foc_current && !isOpenLoop()) {
+    float w = motor.shaft_velocity;
+    float uq = motor.estimateBEMF(w);
+    float ud = 0.0f;
+    if (ff_mode >= 2) uq += motor.phase_resistance * motor.current_sp;
+    if (ff_mode >= 3) {
+      float we_l = w * motor.pole_pairs * PHASE_INDUCTANCE;
+      ud = -we_l * motor.current.q;
+      uq += we_l * motor.current.d;
+    }
+    motor.feed_forward_voltage.q = uq;
+    motor.feed_forward_voltage.d = ud;
+  }
 #ifdef HALL_A_PIN
   if (glitch_pending) { hall_glitch_set(hall, glitch_state); glitch_left = glitch_loops; glitch_pending = 0; }
   else if (glitch_left && --glitch_left == 0) hall_glitch_restore(hall);
