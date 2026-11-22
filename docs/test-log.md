@@ -1325,3 +1325,23 @@ vs 1.34-2.57) but makes L worse (forced along +d, it also acts at zero current, 
 inductance pulses is not zero). Likely causes: R_ds_on current sense (valid only while the low side conducts, short
 pulses), dead time (~0.35 V of 0.8 V lost), rotor moving during the measurement, the correction factor issue of
 simplefoc#572 (point 4). Current PI from these values not tried (gains 4-8x higher, risk of instability).
+
+## 2026-11-22: GD32 driver PR (Candas1/Arduino-FOC#25) on the GD32F130 split board, registers vs dev-gd32
+
+Main supply off, board on the ST-Link 3.3 V, `tools/gd32_drv_regs.py` (TIMER0 + GPIOA/GPIOB configuration,
+duty cycle registers excluded), envs `gd32drv_dev` (Candas1 dev-gd32 947a0a2) and `gd32drv_pr`, `DEAD_ZONE` 0.01335.
+
+- **First PR version (34a7fae) disabled SWD**: the AF index was read with the core's `GD_PIN_AF_GET`, whose mask
+  (`PIN_AF_MASK` 0xFF at bit 15) includes the channel field (bits 19:23): 18 / 34 instead of 2 for CH1 / CH2, then
+  `pin_function` indexes `GD_GPIO_AF[]` (10 entries) out of bounds and `gpio_af_set` writes a garbage AF that spills
+  over the next pins of AFSEL1, PA13/PA14 included -> SWD lost ~1 s after start-up (after the bench's 1 s delay).
+  Recovery without NRST/BOOT0: pyOCD attach loop (`resume_on_disconnect` False) while the board 3.3 V was replugged,
+  caught halted during the 1 s delay (attempt 274), then OpenOCD `halt` + `stm32f1x mass_erase 0` without reset
+  (the `program` command failed after the catch: its reset let the firmware run).
+- Fix (583bfb4): AF index from bits 15:18 only (checked in the disassembly: `and #0x78000` before `pin_function`).
+- **Result: TIMER0 and GPIOB registers identical; GPIOA identical except AFSEL0** (PA4-PA7: 0x49000000 dev,
+  0x0C000000 PR). Same core bug in `analogRead(PA4)` (Vbus at start-up): ADC channel 4 in bits 19:23 -> AF index 64,
+  garbage AF written for PA4 and spilled over PA5-PA7; the value depends on the flash layout. Harmless here (PA4
+  analog, PA5-PA7 inputs) but **any `analogRead` / `pinMode` through the core's pinmap can corrupt the AF of the
+  next pins of the same AFSEL register**: worth reporting to CommunityGD32Cores (PinNames.h comment says AF = bits 15:18).
+- Dead time read back: CCHP 0x983C (DTCFG 60 cycles) in both. Motor not run yet.
