@@ -17,21 +17,23 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
 | P4 | `dt` once per loopFOC | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) **withdrawn** (22/11): the first version (-6.1 %) changed the behaviour (current kick up to 1.8 A); the versions identical to dev gain only 2.3 % (v2, timestamp given to the objects) / 2.5 % (v3) for a new API: not worth it. Branches kept on candas-agent (`perf/loopfoc-dt-once-v2`, `-v3`) |
-| P1 | `setPwm` one limit and one division, guard for invalid voltages (loopFOC -3.0 % on F103) | [Candas1#23](https://github.com/Candas1/Arduino-FOC/pull/23) (15254e1, overflow bug found on the target and fixed): measure the loop time with the guard, update the description |
+| P1 | `setPwm` one limit and one division, guards for invalid voltages (loopFOC -2.5 % on F103) | [Candas1#23](https://github.com/Candas1/Arduino-FOC/pull/23) merged (2fd8b73, overflow bug found on the target and fixed): upstream PR to open by Candas1 (prefilled link ready) |
 | P1 | Current sense pins compared as integers (loopFOC -2.7 % on F103) | [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
 | P1 | Hall velocity decays between edges | [candas-agent#3](https://github.com/candas-agent/Arduino-FOC/pull/3) open (review, then upstream PR) |
 | P1 | Dead-time compensation | measured on 3 boards, [candas-agent#2](https://github.com/candas-agent/Arduino-FOC/pull/2) open (review, then upstream PR) |
 | P1 | STM32 Arduino core 3.0 compatibility | [simplefoc#588](https://github.com/simplefoc/Arduino-FOC/issues/588) (third party): test and support |
-| P1 | PID derivative skipped when D is 0 (-2.2 % with D = 0, +1.1 % with D set) | [Candas1#24](https://github.com/Candas1/Arduino-FOC/pull/24), tested on the target: review |
+| P1 | PID derivative skipped when D is 0 (-2.0 % with D = 0, +1.1 % with D set) | [Candas1#24](https://github.com/Candas1/Arduino-FOC/pull/24), tested on the target: Candas1 decides (version A kept; B with the `derivative` variable kept is more readable, ~-1.6 % estimated) |
 | P1 | Safety: Commander accepts negative / NaN limits and invalid modulation types (torque or voltage at target 0) | found on the target ([audit-dev.md](audit-dev.md) #11-12), not reported upstream |
 | P1 | `angle_openloop` (and stepper) with a negative angle applies no voltage on STM32 (`_sin` of a negative angle = 0) | found on the target, cause in [simplefoc#505](https://github.com/simplefoc/Arduino-FOC/issues/505): add our evidence, propose a fix |
 | P2 | HallSensor glitch 000/111: angle jumps 180 deg electrical for one update | found on the target, not reported upstream |
 | P2 | `getDCCurrent`: sign wrong at angle 0, `_sqrtApprox` 3.4 % (dc_current +2.4 %); trapezoid sector out of the map at ~ -PI/6 | found on the target, not reported upstream |
-| P2 | Fewer soft float operations per loop (divisions, float compares ~20 % of the F103 CPU time) | PC profile done, PID derivative done (see above); remaining: LowPassFilter alpha division, compares |
+| P3 | Fewer soft float operations per loop | each clean change gains 2-3 % (no single bottleneck); integer dt checks set aside (22/11); no fixed point, no templates, no getters/setters (readability first) |
+| P3 | Voltage feed-forward (back-EMF, R*i, dq decoupling) | bench `XK`: no measurable gain at <= 3 rad/s even with the velocity PI retuned (test-log 22/11); higher speeds not tested |
+| P3 | `characteriseMotor` / `tuneCurrentController` on the F103 board | bench `XM`: R and L not usable (spread x2 / x60), with or without dead-time compensation (test-log 22/11) |
 | P2 | Unit tests for edge cases of refactors | on-target test firmwares done (`src/equiv/`, fake clock / driver / sensors, simulated motor), PC math test (`test_native/`) |
 | P2 | Circle limitation of the dq voltage and current | not started |
-| P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started |
+| P2 | Run time bus voltage and overvoltage protection | reading validated, protection not started; requirement: never copy a raw ADC reading into `voltage_power_supply` (plausible range, filter, rate limit, disable on under / overvoltage) |
 | P2 | SmoothingSensor float/double fix | [drivers PR](https://github.com/Candas1/Arduino-FOC-drivers/pull/3) draft |
 | P2 | GD32 loop optimisations, GD32 core `micros()` report | measured, for the GD32 driver / core |
 | P3 | Low speed (< 2 rad/s) limited by the R_ds_on current sense errors | diagnosed, needs an independent current reference (scope + current probe) |

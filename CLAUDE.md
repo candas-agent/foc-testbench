@@ -53,6 +53,11 @@ branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard spli
   identical (checks the reference copy); fake clock with `-Wl,--wrap=_Z7_microsv`. The `equiv_pwm_*` firmwares drive
   the PWM pins: only with the main supply off (board on the ST-Link 3.3 V; they refuse above 10 V on the bus).
 - docs/audit-dev.md lists the bugs found in dev and in our PRs, what is known upstream and what is left to fix.
+- Bench commands for tests (F103): `XR1` plain SimpleFOC (no bench voltage limit / forced foc_current, always `XR0`
+  after), `XG` hall glitch, `XK` voltage feed-forward, `XM` characteriseMotor (blocking: the overcurrent cut does not
+  run, ask the user first). Tools that move the motor: also bug_repro.py, ff_test.py.
+- The user's choices for SimpleFOC code: readability first (no templates, no fixed point, no getters/setters, no
+  integer dt checks for now); PRs list every difference with dev honestly.
 - Local build: `pio run -e esc1` (or `-e gd32f130`), flash: `pio run -e esc1 -t upload`.
 - Tests: `pio test -e esc1 -f test_static`, `pio test -e esc1 -f test_motor`.
 - Campaign: `python tools/campaign.py --port <port> ...` (results in data/, summarise them for the user).

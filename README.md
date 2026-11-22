@@ -64,7 +64,7 @@ the project builds on any machine. Only `lib/qfplib` (GPL, envs `*_qfp`) has to 
 - `ALIGN_VOLTAGE` 0.8 V (≈1.5 A on this board, see the test log); DC link voltage gain 29.3 (calibrated on one board, EFeru's default calibration gives 33).
 - Do not add `-D SIMPLEFOC_STM32_ADC_INTERRUPT` with SimpleFOC dev: the F1 HAL disables the injected interrupt and the currents freeze (fixed in [simplefoc/Arduino-FOC#594](https://github.com/simplefoc/Arduino-FOC/pull/594)).
 - Velocity PI that works on this slower loop (~400 µs): `MVP0.4`, `MVI1`, `MVF0.01`.
-- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `XG0` / `XG7[,loops]` invalid hall state 000 / 111 injected for 1 (or n) control loops (test of docs/audit-dev.md #10), `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
+- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `XG0` / `XG7[,loops]` invalid hall state 000 / 111 injected for 1 (or n) control loops (test of docs/audit-dev.md #10), `XR1` / `XR0` plain SimpleFOC behaviour (the bench no longer sets the voltage limit every loop nor forces foc_current) / bench behaviour, `XK0`..`XK3` voltage feed-forward (off, back-EMF, + R*i, + dq decoupling), `XM<V>[,<comp>]` `characteriseMotor(V)` with the dead-time compensation optionally forced along +d (the bench overcurrent cut does not run during it), `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
 
 ### Safety
 
@@ -209,6 +209,8 @@ python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --durati
 | `tools/equiv_read.py --elf <equiv_pid/pwm elf>` | no (`equiv_pwm_*`: main supply off) | on-target equivalence of PR code vs dev, see [docs/audit-dev.md](docs/audit-dev.md) |
 | `tools/equiv_foc_compare.py --dev <elf> --pr <elf> [--pins <elf>]` | no | loopFOC scenarios with a fake clock, dev vs PR traces |
 | `tools/equiv_audit_read.py --elf <equiv_audit elf>` | no | audit of SimpleFOC dev functions on the target (fake driver / sensors / clock, simulated motor) |
+| `tools/bug_repro.py --elf <elf> --scenario mlu\|mlc\|mwt\|mlv\|olneg\|hall\|dt596` | yes (low values, abort above 3 A / 10 rad/s) | reproduces the bugs of docs/audit-dev.md on the powered board, reads the applied duty cycles from TIM1 |
+| `tools/ff_test.py --elf <elf> [--pi P,I,Tf ...] [--modes 0 2]` | yes (+-3 rad/s) | velocity steps with each voltage feed-forward mode, current setpoint recorded |
 
 ## Reading the board memory with pyOCD
 
