@@ -1349,3 +1349,23 @@ duty cycle registers excluded), envs `gd32drv_dev` (Candas1 dev-gd32 947a0a2) an
   `gd32drv_pr` 583bfb4**: open loop 1.2 V, 0.5 rad/s, 6 s: fundamental 0.679 / 0.706 A (18/11, same test:
   0.70 A), peak 1.44 A, sensor - open loop angle spread 7.3 deg el. Current mode 1 A, 2 rad/s, 6 s: iq 0.995 A,
   id 0.004 A, fundamental 1.000 / 0.969 A (18/11: iq 1.000 A, id ~0). No fault. Same behaviour as dev-gd32.
+- **More tests (same day)**, open loop 1.2 V 0.5 rad/s 6 s, 26 V, direction from the slope of the hall angle
+  (data/2026-11-22_gd32drv/*.csv, second half):
+
+  | firmware | DRIVER_PINS | fundamental ia / ib [A] | sensor vs open loop |
+  |---|---|---|---|
+  | dev-gd32 | PA10,PB15, PA9,PB14, PA8,PB13 | 0.671 / 0.654 | same direction (spread 6.3 deg) |
+  | dev-gd32 | PA8,PB13, PA9,PB14, PA10,PB15 (A and C swapped) | 0.644 / 0.641 | **same direction**: pin order ignored |
+  | PR | normal | 0.648 / 0.670 | same direction (spread 7.4 deg) |
+  | PR | A and C swapped | 0.705 / 0.659 | **opposite** (-7.49 vs +7.53 rad el/s): pin order followed |
+  | PR, dead_zone 0.02 | normal | 0.424 / 0.331 | same direction, poor tracking (spread 75 deg) |
+
+  dead_zone 0.02: CCHP 0x985A = **90 cycles** (1.25 us) as computed; 30 cycles more than 60 -> ~0.17 V more lost at
+  26 V, the 1.2 V open loop barely turns the wheel. Sketches that leave dead_zone at the SimpleFOC default get less
+  torque at low voltage than with the fixed 60 cycles.
+- **Pin not on TIMER0** (C low = PA6, main supply off): start-up message `GD32-DRV: ERR: pin not on TIMER0: 37`
+  (37 = Arduino pin number of PA6), then `ERR-MOT:Init not possible, driver not init`; TIMER0 left unconfigured
+  (CTL0, CHCTL2, CCHP = 0), no fault (CFSR 0). The six pins stay GPIO outputs at 0 (BLDCDriver6PWM::init sets
+  pinMode OUTPUT before _configure6PWM, all platforms): on this board the low sides are active low -> the low side
+  MOSFETs of the valid pins would be ON (motor braked, high sides off, no shoot-through). Pre-existing SimpleFOC
+  behaviour, to keep in mind.
