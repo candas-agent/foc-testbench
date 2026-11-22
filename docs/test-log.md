@@ -1269,3 +1269,8 @@ dev**. Loop time (cloud run 45027774655, dev / v2 / v3 alternated twice; data/20
 dev 297.2, v2 290.25 (-2.3 %), **v3 289.8 (-2.5 %)**. Flash: v2 +56 B, v3 +424 B (RAM +24 B). Sharing the
 conversion brings nothing measurable: the extra gain of the first version (279 us) came from skipping the per-object
 rules, which is exactly what changed the behaviour.
+
+## 2026-11-22 - setPwm with the overflow guard (Candas1#23, 15254e1)
+
+perf_run 2 rad/s, dev / setPwm alternated twice (cloud run 44881317795; data/2026-11-22/perf_setpwm_guard.csv):
+loopFOC 296.95 -> 289.45 us (**-7.5 us, -2.5 %**; -3.0 % before the guard). Flash -40 B. PR description updated.
