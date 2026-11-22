@@ -1287,3 +1287,20 @@ XK1 back-EMF (estimateBEMF from KV 17: 0.324 V per rad/s), XK2 + R * current set
   0.354 V per rad/s + ~0.2 V fixed (dead time): the KV estimate (0.324) is ~9 % low, not the cause.
 - Torque mode +-0.2 A steps: the motor does not move (static friction), back-EMF term 0; iq error RMS 0.153 (off) /
   0.144 / 0.139 A (within the R_ds_on noise). +-0.4 A accelerated past 9 rad/s in 0.45 s (aborted by the tool).
+
+Velocity PI retuned with and without feed-forward (XK2 = back-EMF + R*i), steps 0 -> +-3 -> 0 rad/s, 2 rounds
+alternated (data/2026-11-22/ff_tune.csv, ff_tune2.csv). Overshoot / rise 10-90 % / |velocity error| after 0.7 s:
+
+| PI P, I | off | XK2 |
+|---|---|---|
+| 0.1, 0.25 | 8 % / 0.35 s / 0.25 | 5 % / 0.34 s / 0.12 |
+| 0.1, 0.5 | 20 % / 0.11 s / 0.07 | 28 % / 0.14 s / 0.03 |
+| 0.2, 0.5 | 9 % / 0.20 s / 0.08 | 22 % / 0.12 s / 0.09 |
+| 0.2, 1 | 29 % / 0.03 s / 0.02 | 43 % / 0.03 s / 0.01 |
+| 0.4, 1 (bench default) | 43-58 % / 0.01 s / 0.02 | 88-91 % / 0.01 s / 0.12-0.18 |
+
+With the same gains the feed-forward acts like a higher gain (faster rise, more overshoot); after retuning, the best
+compromises are similar with and without it (within the run-to-run spread). At <= 3 rad/s the back-EMF is ~1 V and
+friction / hall resolution dominate: **no measurable benefit of the voltage feed-forward on this board at low speed**.
+Very low gains (P 0.05) leave large errors (friction). Not tested: higher speeds, where the back-EMF is a larger part
+of the voltage.
