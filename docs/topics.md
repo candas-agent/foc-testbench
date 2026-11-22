@@ -16,7 +16,7 @@ investigation / hardware, P4 not worth it now, ✔ done. The ratings are our jud
 | Priority | Topic | Status |
 |---|---|---|
 | P1 | `library.json` complete manifest | [simplefoc#593](https://github.com/simplefoc/Arduino-FOC/pull/593) open |
-| P1 | `dt` once per loopFOC (loopFOC -6.1 % on F103) | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) open, **do not merge as is**: differences with dev found on the target (voltage kick back from dc/estimated current), rework needed, see [audit-dev.md](audit-dev.md) |
+| P4 | `dt` once per loopFOC | [simplefoc#596](https://github.com/simplefoc/Arduino-FOC/pull/596) **withdrawn** (22/11): the first version (-6.1 %) changed the behaviour (current kick up to 1.8 A); the versions identical to dev gain only 2.3 % (v2, timestamp given to the objects) / 2.5 % (v3) for a new API: not worth it. Branches kept on candas-agent (`perf/loopfoc-dt-once-v2`, `-v3`) |
 | P1 | `setPwm` one limit and one division, guard for invalid voltages (loopFOC -3.0 % on F103) | [Candas1#23](https://github.com/Candas1/Arduino-FOC/pull/23) (15254e1, overflow bug found on the target and fixed): measure the loop time with the guard, update the description |
 | P1 | Current sense pins compared as integers (loopFOC -2.7 % on F103) | [simplefoc#595](https://github.com/simplefoc/Arduino-FOC/pull/595) open |
 | P1 | STM32F1 injected ADC interrupt re-enabled | [simplefoc#594](https://github.com/simplefoc/Arduino-FOC/pull/594) open |
