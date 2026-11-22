@@ -456,6 +456,15 @@ static void doSensor(char* cmd) {
 #ifdef BENCH_VBUS_RUNTIME_PIN
 static float vbus_rt = 0;  // run time bus voltage [V], see readVbusRuntime()
 static uint32_t vbus_rt_reads = 0, vbus_rt_errors = 0, vbus_rt_last_ms = 0;
+#ifndef BENCH_VBUS_RUNTIME_MS
+#define BENCH_VBUS_RUNTIME_MS 20  // [ms] period of the run time reads, 0: every loop
+#endif
+#ifdef BENCH_VBUS_RUNTIME_ALT_PIN
+// stale value check: reads alternate with another ADC pin at a different voltage, a Vbus read more than 10 % away
+// from the start-up value is counted (a stale result would give the value of the other pin)
+static float vbus_alt = 0;
+static uint32_t vbus_alt_bad = 0;
+#endif
 #endif
 
 float friction_ff_a = 0;  // [A] friction feed-forward in velocity mode (XF command)
@@ -490,6 +499,10 @@ static void printSafety() {
   bench_io.print(F("Vbus run time [V]: ")); bench_io.print(vbus_rt, 2);
   bench_io.print(F(" reads ")); bench_io.print(vbus_rt_reads);
   bench_io.print(F(" errors ")); bench_io.println(vbus_rt_errors);
+#ifdef BENCH_VBUS_RUNTIME_ALT_PIN
+  bench_io.print(F("alt pin [V]: ")); bench_io.print(vbus_alt, 3);
+  bench_io.print(F(" Vbus reads off by >10 %: ")); bench_io.println(vbus_alt_bad);
+#endif
 #endif
   bench_io.print(F("friction ff [A]: ")); bench_io.println(friction_ff_a, 3);
 }
@@ -797,7 +810,7 @@ static void bench_step_impl(bool profiled) {
 // GD32F1x0: candas-agent feat/gd32-regular-adc)
 float _readRegularADCVoltage(const int pin);
 static void readVbusRuntime() {
-  if (millis() - vbus_rt_last_ms < 20) return;
+  if (millis() - vbus_rt_last_ms < BENCH_VBUS_RUNTIME_MS) return;
   vbus_rt_last_ms = millis();
 #ifdef BENCH_VBUS_RUNTIME_ANALOGREAD
   // as GenericVoltageSense: Arduino analogRead (10 bit by default) at run time
@@ -808,6 +821,11 @@ static void readVbusRuntime() {
   vbus_rt_reads++;
   if (v < 0) vbus_rt_errors++;
   else vbus_rt = v * BENCH_VBUS_RUNTIME_GAIN;
+#ifdef BENCH_VBUS_RUNTIME_ALT_PIN
+  if (v >= 0 && fabsf(v * BENCH_VBUS_RUNTIME_GAIN - dbg.vbus) > 0.1f * dbg.vbus) vbus_alt_bad++;
+  vbus_alt = _readRegularADCVoltage(BENCH_VBUS_RUNTIME_ALT_PIN);
+  if (vbus_alt < 0) vbus_rt_errors++;
+#endif
 }
 #endif
 
