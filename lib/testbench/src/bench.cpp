@@ -501,7 +501,7 @@ static void printSafety() {
   bench_io.print(F(" errors ")); bench_io.println(vbus_rt_errors);
 #ifdef BENCH_VBUS_RUNTIME_ALT_PIN
   bench_io.print(F("alt pin [V]: ")); bench_io.print(vbus_alt, 3);
-  bench_io.print(F(" Vbus reads off by >10 %: ")); bench_io.println(vbus_alt_bad);
+  bench_io.print(F(" stale reads (Vbus off by >10 % or alt pin = Vbus): ")); bench_io.println(vbus_alt_bad);
 #endif
 #endif
   bench_io.print(F("friction ff [A]: ")); bench_io.println(friction_ff_a, 3);
@@ -829,6 +829,8 @@ static void readVbusRuntime() {
   vbus_alt = _readRegularADCVoltage(BENCH_VBUS_RUNTIME_ALT_PIN);
 #endif
   if (vbus_alt < 0) vbus_rt_errors++;
+  // the other pin read with the Vbus value (stale result) is counted too
+  else if (fabsf(vbus_alt * BENCH_VBUS_RUNTIME_GAIN - dbg.vbus) < 0.1f * dbg.vbus) vbus_alt_bad++;
 #endif
 }
 #endif
