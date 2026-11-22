@@ -453,7 +453,7 @@ static void doSensor(char* cmd) {
 }
 #endif
 
-#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+#ifdef BENCH_VBUS_RUNTIME_PIN
 static float vbus_rt = 0;  // run time bus voltage [V], see readVbusRuntime()
 static uint32_t vbus_rt_reads = 0, vbus_rt_errors = 0, vbus_rt_last_ms = 0;
 #endif
@@ -486,7 +486,7 @@ static void printSafety() {
   bench_io.print(F("heartbeat: "));       bench_io.println(heartbeat_on);
   bench_io.print(F("last fault: "));      bench_io.println(fault);
   bench_io.print(F("Vbus at start-up [V]: ")); bench_io.println(dbg.vbus, 2);
-#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+#ifdef BENCH_VBUS_RUNTIME_PIN
   bench_io.print(F("Vbus run time [V]: ")); bench_io.print(vbus_rt, 2);
   bench_io.print(F(" reads ")); bench_io.print(vbus_rt_reads);
   bench_io.print(F(" errors ")); bench_io.println(vbus_rt_errors);
@@ -792,8 +792,9 @@ static void bench_step_impl(bool profiled) {
 #undef LAP
 }
 
-#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
-// Run time bus voltage through SimpleFOC's regular conversion on the current sense ADC (STM32, SimpleFOC dev)
+#ifdef BENCH_VBUS_RUNTIME_PIN
+// Run time bus voltage through the regular conversion on the current sense ADC (STM32: SimpleFOC dev;
+// GD32F1x0: candas-agent feat/gd32-regular-adc)
 float _readRegularADCVoltage(const int pin);
 static void readVbusRuntime() {
   if (millis() - vbus_rt_last_ms < 20) return;
@@ -808,7 +809,7 @@ static void readVbusRuntime() {
 void bench_loop() {
   PROF_T0();
   bench_step_impl(true);
-#if defined(BENCH_VBUS_RUNTIME_PIN) && defined(_STM32_DEF_)
+#ifdef BENCH_VBUS_RUNTIME_PIN
   readVbusRuntime();
 #endif
 #ifdef BENCH_PROFILE
