@@ -1250,3 +1250,12 @@ from the TIM1 compare registers (spread between phases, % of the period).
 | #11 `MLV-2`, angle mode | not conclusive: 0.6 V does not start the motor (simulation result stands) |
 | #10 hall glitch `XG0` / `XG7` / `XG0,5` at 1 rad/s, foc_current | glitch visible in the recording; iq dips (to ~-0.2 A for 5 loops) within the R_ds_on noise: small effect at this speed and current |
 | #596 dc_current -> foc_current after 0.1 s, target 0.2 A | **PR: iq 1.79 A (8 ms above 0.5 A from the target) and -1.26 A the second time (19 ms, wrong direction)**; dev: at most 0.85 A for single samples |
+
+## 2026-11-22 - simplefoc#596 v2: loop timestamp given to the filters / controllers
+
+candas-agent perf/loopfoc-dt-once-v2 (2ef5f18, from Candas1 perf/loopfoc-dt-once): `LowPassFilter` / `PIDController`
+get `operator()(x, now_us)` (dev code with now_us instead of _micros()), `operator()(x)` calls it with _micros();
+loopFOC passes last_loopfoc_timestamp_us. On-target scenarios (equiv_foc_dev vs equiv_foc_v2, fake clock): **all 18
+cases identical to dev bit for bit** (the first version differed in 9). Loop time (perf_run 2 rad/s, dev / v2
+alternated twice, cloud run 45025816596; data/2026-11-22/perf_dtv2.csv): loopFOC 297.15 -> 290.45 us (**-6.7 us,
+-2.3 %**; first version -6.1 %), total 431.6 -> 425.9 us. Flash +56 B, RAM same.
