@@ -799,7 +799,12 @@ float _readRegularADCVoltage(const int pin);
 static void readVbusRuntime() {
   if (millis() - vbus_rt_last_ms < 20) return;
   vbus_rt_last_ms = millis();
+#ifdef BENCH_VBUS_RUNTIME_ANALOGREAD
+  // as GenericVoltageSense: Arduino analogRead (10 bit by default) at run time
+  float v = analogRead(BENCH_VBUS_RUNTIME_PIN) / 1023.0f * 3.3f;
+#else
   float v = _readRegularADCVoltage(BENCH_VBUS_RUNTIME_PIN);
+#endif
   vbus_rt_reads++;
   if (v < 0) vbus_rt_errors++;
   else vbus_rt = v * BENCH_VBUS_RUNTIME_GAIN;
