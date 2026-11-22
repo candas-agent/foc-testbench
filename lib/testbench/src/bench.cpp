@@ -112,7 +112,12 @@ static bool isOpenLoop() {
 // In open loop (voltage mode) the voltage amplitude is the voltage limit: it is set from openloop_voltage,
 // optionally lowered to keep the same fundamental amplitude with and without compensation.
 // In the other modes the voltage limit is FOC_VOLTAGE_LIMIT.
+// XR1: plain SimpleFOC behaviour for bug reproduction (docs/audit-dev.md): the bench no longer sets the voltage
+// limit every loop nor forces foc_current in closed loop. XR0 (default) restores the bench behaviour.
+static int raw_simplefoc = 0;
+
 static void updateVoltageLimit() {
+  if (raw_simplefoc) return;
   if (isOpenLoop() && motor.torque_controller == TorqueControlType::voltage) {
     float u = openloop_voltage;
 #ifndef BENCH_NO_DEADTIME
@@ -376,7 +381,7 @@ static void doMotor(char* cmd) {
       // no aligned position sensor: only the open loop motion controls are possible
       motor.controller = MotionControlType::velocity_openloop;
       bench_io.println(F("No aligned sensor: only open loop allowed (MC3 velocity, MC4 angle), back to velocity open loop"));
-    } else if (motor.torque_controller != TorqueControlType::foc_current) {
+    } else if (!raw_simplefoc && motor.torque_controller != TorqueControlType::foc_current) {
       // closed loop with current control only: in voltage mode the torque target is in volts (1 V ~ 2 A)
       motor.torque_controller = TorqueControlType::foc_current;
       bench_io.println(F("Closed loop: torque control forced to foc_current (MT2)"));
@@ -530,6 +535,10 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
+    case 'R':  // XR1 / XR0: plain SimpleFOC limits and torque modes (bug reproduction) / bench behaviour
+      if (hasArg(cmd + 1)) raw_simplefoc = atoi(cmd + 1) ? 1 : 0;
+      bench_io.print(F("plain SimpleFOC mode: ")); bench_io.println(raw_simplefoc);
+      return;
 #ifdef HALL_A_PIN
     case 'G': {  // XG0 / XG7[,loops]: invalid hall state 000 / 111 for 1 (or <loops>) control loops
       int st = hasArg(cmd + 1) ? atoi(cmd + 1) : 0;
