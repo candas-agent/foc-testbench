@@ -30,6 +30,7 @@ def main():
     p.add_argument("--speed", type=float, default=3.0)
     p.add_argument("--modes", type=int, nargs="*", default=[0, 1, 2, 3])
     p.add_argument("--rounds", type=int, default=2)
+    p.add_argument("--pi", nargs="*", default=["0.4,1,0.01"], help="velocity PI P,I,Tf values to try")
     p.add_argument("--imax", type=float, default=3.5)
     p.add_argument("--vmax", type=float, default=8.0)
     a = p.parse_args()
@@ -55,14 +56,16 @@ def main():
         time.sleep(0.2)
         port.reset_input_buffer()
         try:
+            combos = [(pi, m) for pi in a.pi for m in a.modes]
             for rnd in range(a.rounds):
-                order = a.modes if rnd % 2 == 0 else list(reversed(a.modes))
-                for mode in order:
+                order = combos if rnd % 2 == 0 else list(reversed(combos))
+                for pi, mode in order:
+                    kp, ki, tf = pi.split(",")
                     cmd("ME0")
                     t_wait = time.time()
                     while abs(mem.read_dbg()["velocity"]) > 0.3 and time.time() - t_wait < 20:
                         time.sleep(0.2)
-                    for c in ["XR0", "VO", "MLC2", "MT2", "MC1", "M0", "ST0", "MVP0.4", "MVI1", "MVF0.01", f"XK{mode}"]:
+                    for c in ["XR0", "VO", "MLC2", "MT2", "MC1", "M0", "ST0", f"MVP{kp}", f"MVI{ki}", f"MVF{tf}", f"XK{mode}"]:
                         cmd(c)
                     cmd("ME1", 0.0)
                     t0 = time.time()
@@ -98,10 +101,10 @@ def main():
                         tail = [v for t, v, _ in vel if t > 0.7]
                         mean_err = sum(tail) / len(tail) - target if tail else float("nan")
                         uqmax = max(abs(u) for _, _, u in vel)
-                        r = {"round": rnd, "mode": mode, "target": target, "start": round(start, 3), "iq_err_rms": rms,
+                        r = {"round": rnd, "pi": pi, "mode": mode, "target": target, "start": round(start, 3), "iq_err_rms": rms,
                              "rise_s": rise, "overshoot": over, "end_err": mean_err, "uq_max": uqmax}
                         results.append(r)
-                        print(f"mode {mode} ({MODES[mode]:31s}) {start:5.2f} -> {target:5.2f}: iq error RMS {rms:5.3f} A  "
+                        print(f"PI {pi:12s} mode {mode} ({MODES[mode]:15.15s}) {start:5.2f} -> {target:5.2f}: iq error RMS {rms:5.3f} A  "
                               f"rise {('%.3f s' % rise) if rise else '  -    '}  "
                               f"{'overshoot %5.1f %%' % over if abs(step) > 0.5 else 'max|v| %5.2f   ' % over}  "
                               f"end error {mean_err:6.3f}  max|uq| {uqmax:4.2f} V")
@@ -114,14 +117,14 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(results[0].keys()))
         w.writeheader(); w.writerows(results)
     print("\nmean per mode (steps 0 -> +-V only for rise / overshoot):")
-    for mode in a.modes:
-        rs = [r for r in results if r["mode"] == mode]
+    for pi, mode in [(pi, m) for pi in a.pi for m in a.modes]:
+        rs = [r for r in results if r["mode"] == mode and r["pi"] == pi]
         steps = [r for r in rs if r["target"] != 0.0 and r["rise_s"]]
         rms = sum(r["iq_err_rms"] for r in rs) / len(rs)
         rise = sum(r["rise_s"] for r in steps) / len(steps) if steps else float("nan")
         over = sum(r["overshoot"] for r in steps) / len(steps) if steps else float("nan")
         endr = sum(abs(r["end_err"]) for r in rs) / len(rs)
-        print(f"  mode {mode} {MODES[mode]:31s}: iq error RMS {rms:.3f} A, rise {rise:.3f} s, overshoot {over:5.1f} %, "
+        print(f"  PI {pi:12s} mode {mode} {MODES[mode]:31s}: iq error RMS {rms:.3f} A, rise {rise:.3f} s, overshoot {over:5.1f} %, "
               f"|end error| {endr:.3f} rad/s")
     print("saved", a.out)
 

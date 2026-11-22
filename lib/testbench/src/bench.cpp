@@ -542,7 +542,7 @@ static void doSafety(char* cmd) {
     case 'H': if (hasArg(cmd + 1)) heartbeat_on = atoi(cmd + 1) ? 1 : 0; break;
     case 'C': fault = 0; break;
     case 'F': if (hasArg(cmd + 1)) friction_ff_a = (float)atof(cmd + 1); break;  // XF0.3: friction feed-forward [A]
-    case 'M': {  // XM<volt>[,<comp V>]: characteriseMotor(volt, 1.5) as the SimpleFOC command MFP, optionally with the
+    case 'M': {  // XM<volt>[,<comp V>]: characteriseMotor(volt) as the SimpleFOC command MFP, optionally with the
                  // dead-time compensation forced along +d (the measurement only applies positive d voltages; loopFOC,
                  // which normally gives the current direction, does not run during the measurement)
       float v = hasArg(cmd + 1) ? (float)atof(cmd + 1) : 0.8f;
@@ -555,7 +555,7 @@ static void doSafety(char* cmd) {
 #else
       if (comp != 0.0f) bench_io.println(F("no dead-time compensation in this build: measured without"));
 #endif
-      int res = motor.characteriseMotor(v, 1.5f);
+      int res = motor.characteriseMotor(v);   // BLDCMotor: correction factor 1.5, as MFP
 #ifndef BENCH_NO_DEADTIME
       motor.deadtime_compensation = comp_prev;
 #endif
