@@ -1304,3 +1304,24 @@ compromises are similar with and without it (within the run-to-run spread). At <
 friction / hall resolution dominate: **no measurable benefit of the voltage feed-forward on this board at low speed**.
 Very low gains (P 0.05) leave large errors (friction). Not tested: higher speeds, where the back-EMF is a larger part
 of the voltage.
+
+## 2026-11-22 - characteriseMotor on the STM32F103 board, with / without dead-time compensation
+
+Firmware dt_f103 (dev + compensation d0f4aa3, cloud run 45033818929), bench command `XM<V>[,<comp>]` =
+BLDCMotor::characteriseMotor(V) (correction factor 1.5, as the SimpleFOC command MFP), compensation forced along +d
+(loopFOC does not run during the measurement). 0.8 V, motor in torque mode target 0, run twice each, alternated.
+
+| Run | R [Ohm] | Ld [mH] | Lq [mH] | new el. zero (present 2.09) |
+|---|---|---|---|---|
+| no compensation | 2.57 | 0.0003 | 0.88 (warning Lq > 2 Ld) | NaN |
+| compensation 0.38 V | 1.14 | 16.7 | 19.7 | 2.71 |
+| no compensation | 1.34 | 0.91 | 1.27 | 1.72 |
+| compensation 0.38 V | 1.19 | 3.74 | 21.1 (warning) | 2.83 |
+
+Config values used by the bench: R 0.166 Ohm, L 0.37 mH (the dead-time calibration line fit gave 0.57 Ohm).
+**Not usable on this board**: R spread x2 and 7-15x the config value, L spread x60. With R and L of run 3,
+tuneCurrentController(100 Hz) would give P 0.8 / I 842 instead of 0.23 / 105. The compensation lowers R (1.14-1.19
+vs 1.34-2.57) but makes L worse (forced along +d, it also acts at zero current, so the current between the
+inductance pulses is not zero). Likely causes: R_ds_on current sense (valid only while the low side conducts, short
+pulses), dead time (~0.35 V of 0.8 V lost), rotor moving during the measurement, the correction factor issue of
+simplefoc#572 (point 4). Current PI from these values not tried (gains 4-8x higher, risk of instability).
