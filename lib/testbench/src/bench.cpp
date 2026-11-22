@@ -509,7 +509,7 @@ static void printSafety() {
 
 // bus voltage, measured once before the current sense takes the ADC
 static void measureVbus() {
-#ifdef VBUS_PIN
+#if defined(VBUS_PIN) && !defined(BENCH_NO_VBUS_STARTUP)
   pinMode(VBUS_PIN, INPUT_ANALOG);
   float sum = 0;
   const int n = 16;
@@ -810,6 +810,10 @@ static void bench_step_impl(bool profiled) {
 // GD32F1x0: candas-agent feat/gd32-regular-adc)
 float _readRegularADCVoltage(const int pin);
 static void readVbusRuntime() {
+#ifdef BENCH_VBUS_RUNTIME_WHEN_ENABLED
+  // first read only once the motor runs (test of a first ADC read after the current sense init)
+  if (!motor.enabled) return;
+#endif
   if (millis() - vbus_rt_last_ms < BENCH_VBUS_RUNTIME_MS) return;
   vbus_rt_last_ms = millis();
 #ifdef BENCH_VBUS_RUNTIME_ANALOGREAD

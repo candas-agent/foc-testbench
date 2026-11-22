@@ -8,7 +8,9 @@
 
 // Power stage
 #define SUPPLY_VOLTAGE      26.0f   // [V] set the REAL measured supply voltage, the compensation volts are scaled with it
+#ifndef BENCH_PWM_FREQUENCY
 #define BENCH_PWM_FREQUENCY 16000   // [Hz] GD32 driver default
+#endif
 // Dead time: 60 timer cycles / 72 MHz = 0.83 us = 1.33 % of the 62.5 us PWM period.
 // dev-gd32 ignores dead_zone (fixed DEAD_TIME 60 in gd32_mcu.h); fix/gd32-pins-deadtime converts it
 // (dead_zone * 72 MHz / 16 kHz, rounded): 0.01335 -> 60 cycles. Also the expected value printed by the bench.
