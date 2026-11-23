@@ -38,7 +38,17 @@ static const PinDef PINS[] = {
   {PB12, GPIOB, 12, 'B', false}, {PB13, GPIOB, 13, 'B', false}, {PB14, GPIOB, 14, 'B', false},
   {PB15, GPIOB, 15, 'B', false},
   {PC13, GPIOC, 13, 'C', false}, {PC14, GPIOC, 14, 'C', false}, {PC15, GPIOC, 15, 'C', false},
-  {PF4, GPIOF, 4, 'F', false},  {PF5, GPIOF, 5, 'F', false},  {PF6, GPIOF, 6, 'F', false},
+#endif
+#ifdef PF4
+  {PF4, GPIOF, 4, 'F', false},
+#endif
+#ifdef PF5
+  {PF5, GPIOF, 5, 'F', false},
+#endif
+#ifdef PF6
+  {PF6, GPIOF, 6, 'F', false},
+#endif
+#ifdef PF7
   {PF7, GPIOF, 7, 'F', false},
 #endif
   {PF0, GPIOF, 0, 'F', false}, {PF1, GPIOF, 1, 'F', false},
