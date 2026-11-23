@@ -1524,7 +1524,7 @@ cloud run 45138317372, 26 V. `ADC_USE_INTERRUPT` (commented define) becomes the 
 
 ## 2026-11-23: GD32 cleanup point 5, driver and current sense limited to the GD32F1x0 (candas-agent cleanup/gd32-f1x0-only 225b739)
 
-Candas1/Arduino-FOC#33. Guards `_GD32_DEF_ && GD32F1x0` in driver gd32_mcu.h/.cpp and current sense gd32_mcu.h.
+Candas1/Arduino-FOC#33 (merged, 812ae3d on dev-gd32). Guards `_GD32_DEF_ && GD32F1x0` in driver gd32_mcu.h/.cpp and current sense gd32_mcu.h.
 Cloud run 45141797236, no flashing:
 - GD32F130 bench firmware: `gd32cl5_base` (dev-gd32 a13d04d) and `gd32cl_5`: firmware.bin byte-identical, 48 188 B.
 - GD32F103RC check sketch (src/gd32check, envs `gd32chk_base` / `gd32chk_5`): dev-gd32 compiles on the F103 and links
