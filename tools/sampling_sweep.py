@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 GD32 driver sampling point sweep: THE MOTOR MOVES (open loop in voltage mode, the currents are only measured).
-For each value, writes the driver's `sampling_point` global (fraction of the PWM period where TIMER0 CH3 triggers
+For each value, writes the driver's `gd32_timer_sampling_point` (or older `sampling_point`) global (fraction of the PWM period where TIMER0 CH3 triggers
 the injected ADC conversions) through SWD with the motor disabled, then runs tools/ol_run.py and keeps the
 fundamental amplitude and the residual of ia and ib. A wrong sampling instant shows as a fundamental away from
 the reference and a larger residual. Restores the initial value at the end.
@@ -24,7 +24,13 @@ PEAK = re.compile(r"peak phase current ([\d.]+) A")
 
 def write_sp(elf, value):
     with BoardMemory(elf) as mem:
-        addr = elf_symbols(elf, ["sampling_point"])["sampling_point"][0]
+        # gd32_timer_sampling_point since the GD32 cleanup (point 3), sampling_point before
+        names = ["gd32_timer_sampling_point", "sampling_point"]
+        syms = elf_symbols(elf, [], optional=names)
+        found = [n for n in names if n in syms]
+        if not found:
+            raise RuntimeError(f"none of {names} in the ELF")
+        addr = syms[found[0]][0]
         old = struct.unpack("<f", bytes(mem.target.read_memory_block8(addr, 4)))[0]
         mem.target.write_memory_block8(addr, list(struct.pack("<f", value)))
         return old
