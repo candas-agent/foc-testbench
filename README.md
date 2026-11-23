@@ -48,7 +48,7 @@ the project builds on any machine. Only `lib/qfplib` (GPL, envs `*_qfp`) has to 
 
 ### GD32F130 split board
 
-- Driver: `Candas1/Arduino-FOC#dev-gd32` (synced with SimpleFOC master) merged with the compensation, branch `candas-agent/Arduino-FOC#test/gd32-deadtime`. The driver ignores `dead_zone` and sets a fixed `DEAD_TIME` of 60 cycles (0.83 µs, 1.33 % at 16 kHz): `DEAD_ZONE` in `board_gd32f130_split.h` only serves the expected value `Vbus × dead_zone`.
+- Driver: `Candas1/Arduino-FOC#dev-gd32` (SimpleFOC dev + the GD32F1x0 driver and current sense; the cleanup PRs Candas1#27-#34 are merged, 5b70df8). Env `gd32f130` uses it merged with the dead time compensation (`candas-agent/Arduino-FOC#test/gd32-deadtime`); the `gd32drv_*` / `gd32cl*` envs pin dev-gd32 commits to compare PRs. Since Candas1#25 the driver converts `dead_zone` into timer cycles: `DEAD_ZONE` 0.01335 in `board_gd32f130_split.h` = 60 cycles (0.83 µs, 1.33 % at 16 kHz), also the expected value `Vbus × dead_zone`.
 - Power latch: the board switches itself off without the power button. On the bench, bridge the 2 pins of the switch connector; the firmware also holds PB2 high.
 - ST-Link: GND, SWDIO, SWCLK on the 4-pin debug header next to the MCU. Do not connect the ST-Link 3.3 V when the board is powered.
 - No ideal diode on the supply here: energy fed back by the motor goes to the supply. Keep low speeds and don't spin the wheel fast by hand. The bus voltage is measured once at start-up only (PA4), the ADC is then used by the current sense.

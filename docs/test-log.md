@@ -1550,3 +1550,4 @@ Cloud run 45141797236, no flashing:
 - Loop time (`tools/loop_time.py`, motor run 1 A 2 rad/s with the user's go, alternated, data/gd32cl6_loop.csv):
   loopFOC base 163.3 / 162.9 us, gd32cl_6c 162.9 / 163.0 us; max 174.6 / 174.3 vs 174.9 / 174.7 us; total
   207.8 / 207.4 vs 207.2 / 207.6 us: no difference. Board left on gd32cl_6c, 26 V, motor disabled.
+- Merged as Candas1/Arduino-FOC#34 (5b70df8 on dev-gd32). gd32cl_6c = same code as 5b70df8.

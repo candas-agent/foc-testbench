@@ -12,7 +12,7 @@
 #define BENCH_PWM_FREQUENCY 16000   // [Hz] GD32 driver default
 #endif
 // Dead time: 60 timer cycles / 72 MHz = 0.83 us = 1.33 % of the 62.5 us PWM period.
-// dev-gd32 ignores dead_zone (fixed DEAD_TIME 60 in gd32_mcu.h); fix/gd32-pins-deadtime converts it
+// dev-gd32 converts dead_zone since Candas1#25 (before bf1feac: fixed DEAD_TIME 60 in gd32_mcu.h)
 // (dead_zone * 72 MHz / 16 kHz, rounded): 0.01335 -> 60 cycles. Also the expected value printed by the bench.
 #ifndef DEAD_ZONE
 #define DEAD_ZONE           0.01335f

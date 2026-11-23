@@ -22,7 +22,8 @@ branch fix/mxlemming-checks). Hardware: B-G431B-ESC1 or GD32F130 hoverboard spli
   26 V supply. The bus voltage is only measured at start-up (`X` prints it), there is no overvoltage cut.
 - Commands go through RTT (tools `--port rtt --env gd32f130`), no serial port, no `pio test`.
 - Current sense on the MOSFETs R_ds_on: less accurate than the ESC1 shunts, check the offsets at power-up.
-- Dead time fixed by the GD32 driver (60 cycles, 0.83 us); DEAD_ZONE in the board file only serves the expected value.
+- Dead time: the GD32 driver converts dead_zone since Candas1#25 (dead_zone * 72 MHz / 16 kHz, rounded): DEAD_ZONE
+  0.01335 in the board file = 60 cycles, 0.83 us. Envs pinned before bf1feac use a fixed 60 cycles (same value).
 - Only the first 32 KB of flash run without wait states: ld/gd32f130_fastloop.ld places the loop code and the
   virtual tables there (link fails if `__fast_end` > 0x08008000). Code called every loop goes in that list.
   The linker script is not tracked by the build: delete .pio/build/<env>/firmware.elf after changing it.
