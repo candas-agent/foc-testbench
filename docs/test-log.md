@@ -1520,4 +1520,4 @@ cloud run 45138317372, 26 V. `ADC_USE_INTERRUPT` (commented define) becomes the 
   (an interrupt costs a few us; maybe micros() read across the interrupt), not investigated.
 - Currents (`tools/ol_run.py`, same point): ia/ib fundamental 1.007/0.996 A without, 1.009/0.973 A with; residual
   0.197/0.224 vs 0.195/0.227 A; sensor - open loop angle 70.1 vs 70.0 deg el.: same.
-- Board left on gd32cl_4it, 26 V, motor disabled.
+- Board left on gd32cl_4it, 26 V, motor disabled. Merged as Candas1/Arduino-FOC#32 (a13d04d on dev-gd32).
