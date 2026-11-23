@@ -1551,3 +1551,10 @@ Cloud run 45141797236, no flashing:
   loopFOC base 163.3 / 162.9 us, gd32cl_6c 162.9 / 163.0 us; max 174.6 / 174.3 vs 174.9 / 174.7 us; total
   207.8 / 207.4 vs 207.2 / 207.6 us: no difference. Board left on gd32cl_6c, 26 V, motor disabled.
 - Merged as Candas1/Arduino-FOC#34 (5b70df8 on dev-gd32). gd32cl_6c = same code as 5b70df8.
+
+## 23/11 — GD32 cleanup point 2 (whitespace), compile only
+- candas-agent cleanup/gd32-whitespace 13ddb4e, base Candas1 dev-gd32 5b70df8. Two .cpp files: tabs -> 2 spaces,
+  one space before `=` (the user's choice, as in the STM32 F1 code), trailing spaces and doubled blank lines removed.
+  `git diff -w` = 5 removed blank lines only.
+- Cloud 45148693458: gd32cl2_base / gd32cl_2 48 204 B, _it 48 420 B, _pb12 (`TIMER_BLDC_EMERGENCY_SHUTDOWN_PIN=PB12`)
+  48 236 B: all three pairs byte-identical (cmp). Not flashed (no need). Polarity flags not built.
