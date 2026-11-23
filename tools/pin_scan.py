@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pin scan of an unknown GD32F130 QFN32 board (firmware src/pinscan, env pinscan_f130k6, simplefoc-work #39).
+Pin scan of an unknown GD32F130 / GD32E230 QFN32 board (firmware src/pinscan, envs pinscan_*, simplefoc-work #39).
 SAFETY: main supply and battery disconnected, board on the ST-Link 3.3 V only. The firmware never drives a pin,
 it only switches the internal pull-up / pull-down.
   python tools/pin_scan.py --elf <elf>              # classify again and print the table
@@ -24,8 +24,8 @@ GDB = sorted(glob.glob(os.path.expanduser("~/.platformio/packages/toolchain-gcca
 MAGIC = 0x5C4A0001
 MAX = 32
 OFF = {"magic": 0, "mode": 4, "only": 8, "done": 12, "count": 16, "port": 20, "bit": 52, "rd_down": 84,
-       "rd_up": 116, "adc_mv": 148, "freq_hz": 212}
-SIZE = 276
+       "rd_up": 116, "adc_mv": 148, "freq_hz": 212, "tick_hz": 276}
+SIZE = 280
 
 
 def scan_address(elf):
@@ -42,6 +42,8 @@ def read_block(t, adr):
 
 def table(b):
     count = struct.unpack_from("<I", b, OFF["count"])[0]
+    tick = struct.unpack_from("<I", b, OFF["tick_hz"])[0]
+    print(f"time base {tick} Hz (measured against delay(), toggle periods computed from it)")
     print(f"{'pin':5} {'pull-down':>9} {'pull-up':>7}  {'class':6} {'ADC mV':>7} {'toggle':>9}")
     for i in range(count):
         name = f"P{chr(b[OFF['port'] + i])}{b[OFF['bit'] + i]}"

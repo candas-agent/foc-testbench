@@ -1,5 +1,5 @@
-// Pin scan of an unknown GD32F130 QFN32 board (simplefoc-work #39): find which MCU pin goes where with a scope,
-// probing only easy points (gate driver inputs, op amp outputs, connectors), never the QFN pads.
+// Pin scan of an unknown GD32F130 / GD32E230 QFN32 board (simplefoc-work #39): find which MCU pin goes where with a
+// scope, probing only easy points (gate driver inputs, op amp outputs, connectors), never the QFN pads.
 // SAFETY: main supply and battery DISCONNECTED, board on the ST-Link 3.3 V only (gate drivers unpowered).
 // No pin is ever an output: the firmware only switches the internal pull-up / pull-down (~40 kOhm), so a pin
 // tied to anything (op amp output, unpowered driver input) carries less than 100 uA. SWD pins PA13 / PA14 untouched.
@@ -24,9 +24,15 @@ static const PinDef PINS[] = {
   {PA6, GPIOA, 6, 'A', true},  {PA7, GPIOA, 7, 'A', true},  {PA8, GPIOA, 8, 'A', false},
   {PA9, GPIOA, 9, 'A', false}, {PA10, GPIOA, 10, 'A', false}, {PA11, GPIOA, 11, 'A', false},
   {PA12, GPIOA, 12, 'A', false}, {PA15, GPIOA, 15, 'A', false},
-  {PB0, GPIOB, 0, 'B', true},  {PB1, GPIOB, 1, 'B', true},  {PB2, GPIOB, 2, 'B', false},
+  {PB0, GPIOB, 0, 'B', true},  {PB1, GPIOB, 1, 'B', true},
+#ifdef PB2
+  {PB2, GPIOB, 2, 'B', false},
+#endif
   {PB3, GPIOB, 3, 'B', false}, {PB4, GPIOB, 4, 'B', false}, {PB5, GPIOB, 5, 'B', false},
-  {PB6, GPIOB, 6, 'B', false}, {PB7, GPIOB, 7, 'B', false}, {PB8, GPIOB, 8, 'B', false},
+  {PB6, GPIOB, 6, 'B', false}, {PB7, GPIOB, 7, 'B', false},
+#ifdef PB8
+  {PB8, GPIOB, 8, 'B', false},
+#endif
   {PF0, GPIOF, 0, 'F', false}, {PF1, GPIOF, 1, 'F', false},
 };
 static const uint32_t N = sizeof(PINS) / sizeof(PINS[0]);
@@ -37,17 +43,44 @@ struct Scan {
   uint32_t magic;           // 0x5C4A0001
   volatile uint32_t mode;   // written by the tool
   volatile uint32_t only;   // pin index for mode 2
-  volatile uint32_t done;   // incremented after each classification, mode copied when a mode starts
+  volatile uint32_t done;   // incremented after each classification
   uint32_t count;
   char port[MAX];
   uint8_t bit[MAX];
   uint8_t rd_down[MAX];     // level read with pull-down
   uint8_t rd_up[MAX];       // level read with pull-up
   uint16_t adc_mv[MAX];     // 0xFFFF: no ADC on this pin
-  uint16_t freq_hz[MAX];    // toggle frequency in mode 1
+  uint16_t freq_hz[MAX];    // toggle frequency in modes 1 and 2
+  uint32_t tick_hz;         // time base rate measured against delay(): the toggle periods are computed from it
 };
-static_assert(sizeof(Scan) == 276, "layout mirrored in tools/pin_scan.py");
+static_assert(sizeof(Scan) == 280, "layout mirrored in tools/pin_scan.py");
 volatile Scan scan;
+
+// Time base: DWT cycle counter on the Cortex-M3 (F130); the Cortex-M23 (E230) has none: TIMER2 free-running, 16 bit
+#if defined(GD32E23x)
+static void timebase_init() {
+  rcu_periph_clock_enable(RCU_TIMER2);
+  TIMER_CTL0(TIMER2) = 0;
+  TIMER_PSC(TIMER2) = SystemCoreClock / 1000000u - 1u;  // ~1 MHz, the real rate is measured into tick_hz
+  TIMER_CAR(TIMER2) = 0xFFFF;
+  TIMER_SWEVG(TIMER2) = TIMER_SWEVG_UPG;
+  TIMER_CTL0(TIMER2) = TIMER_CTL0_CEN;
+}
+static inline uint32_t now_ticks() { return TIMER_CNT(TIMER2) & 0xFFFFu; }
+static inline uint32_t ticks_add(uint32_t t, uint32_t d) { return (t + d) & 0xFFFFu; }
+static inline uint32_t ticks_diff(uint32_t a, uint32_t b) { return (a - b) & 0xFFFFu; }
+static inline bool reached(uint32_t now, uint32_t t) { return (int16_t)(uint16_t)(now - t) >= 0; }
+#else
+static void timebase_init() {
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+static inline uint32_t now_ticks() { return DWT->CYCCNT; }
+static inline uint32_t ticks_add(uint32_t t, uint32_t d) { return t + d; }
+static inline uint32_t ticks_diff(uint32_t a, uint32_t b) { return a - b; }
+static inline bool reached(uint32_t now, uint32_t t) { return (int32_t)(now - t) >= 0; }
+#endif
 
 static void set_pull(const PinDef &p, bool up) {
   uint32_t v = GPIO_PUD(p.port);
@@ -87,16 +120,16 @@ static bool level_up[MAX];
 static void toggle_loop(uint32_t mode) {
   all_inputs_pulldown();
   for (uint32_t i = 0; i < N; i++) {
-    half_period[i] = SystemCoreClock / (2u * scan.freq_hz[i]);
+    half_period[i] = scan.tick_hz / (2u * scan.freq_hz[i]);
     level_up[i] = false;
   }
-  uint32_t now = DWT->CYCCNT;
-  for (uint32_t i = 0; i < N; i++) next_edge[i] = now + half_period[i];
+  uint32_t now = now_ticks();
+  for (uint32_t i = 0; i < N; i++) next_edge[i] = ticks_add(now, half_period[i]);
   while (scan.mode == mode) {
-    now = DWT->CYCCNT;
+    now = now_ticks();
     for (uint32_t i = 0; i < N; i++) {
-      if ((int32_t)(now - next_edge[i]) >= 0) {
-        next_edge[i] += half_period[i];
+      if (reached(now, next_edge[i])) {
+        next_edge[i] = ticks_add(next_edge[i], half_period[i]);
         if (mode == 1 || i == scan.only) {
           level_up[i] = !level_up[i];
           set_pull(PINS[i], level_up[i]);
@@ -108,9 +141,10 @@ static void toggle_loop(uint32_t mode) {
 }
 
 void setup() {
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  DWT->CYCCNT = 0;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  timebase_init();
+  uint32_t t0 = now_ticks();
+  delay(20);
+  scan.tick_hz = ticks_diff(now_ticks(), t0) * 50u;
   scan.count = N;
   for (uint32_t i = 0; i < N; i++) {
     scan.port[i] = PINS[i].name;
@@ -128,7 +162,7 @@ void loop() {
   uint32_t m = scan.mode;
   if (m == 1 || m == 2) {
     toggle_loop(m);
-  } else if (m == 3) {  // re-classify on request, then back to idle
+  } else if (m == 3) {  // classify again on request, then back to idle
     classify();
     scan.mode = 0;
   }
