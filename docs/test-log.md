@@ -1538,3 +1538,6 @@ Cloud run 45141797236, no flashing:
 - Cloud 45144925553: gd32cl6_base = gd32cl_6a byte-identical (48 188 B); with SIMPLEFOC_GD32_ADC_INTERRUPT
   gd32cl6_base_it = gd32cl_6a_it (48 404 B). gd32cl_6 48 204 B (+16), only `_driverSyncLowSide` differs in the
   disassembly. Not flashed yet.
+- C (e1f98f8: unused `resolution`/`channel2` parameters and `_UNUSED(phase_state)` removed, TIMER_CCX_ENABLE, comment),
+  cloud 45145849155: gd32cl_6c byte-identical to gd32cl_6 (48 204 B); gd32cl_6c_it 48 420 B, disassembly vs
+  gd32cl6_base_it: same instructions except `_driverSyncLowSide` (B) and the mangled name of `_setSinglePhaseState`.
