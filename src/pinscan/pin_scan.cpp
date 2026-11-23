@@ -5,7 +5,7 @@
 // tied to anything (op amp output, unpowered driver input) carries less than 100 uA. SWD pins PA13 / PA14 untouched.
 // Read and driven over SWD by tools/pin_scan.py through the struct `scan`:
 //   at start-up and mode 3: classify every pin (pull-down read, pull-up read, ADC voltage without pull); mode 0: idle
-//   mode 1: all pins toggle their pull at their own frequency, f = (base + n) * 100 Hz, base A=10, B=30, F=50
+//   mode 1: all pins toggle their pull at their own frequency, f = (base + n) * 100 Hz, base A=10, B=30, F=50, C=60
 //           (PA7 = 1.7 kHz, PB1 = 3.1 kHz, PF0 = 5.0 kHz): the frequency seen on the scope gives the pin
 //   mode 2: only pin index `only` toggles (confirmation), the others stay on pull-down
 #include <Arduino.h>
@@ -14,7 +14,7 @@ struct PinDef {
   uint32_t arduino;
   uint32_t port;   // GPIOA / GPIOB / GPIOF base address
   uint8_t bit;
-  char name;       // 'A', 'B', 'F'
+  char name;       // 'A', 'B', 'C', 'F'
   bool adc;
 };
 
@@ -33,10 +33,19 @@ static const PinDef PINS[] = {
 #ifdef PB8
   {PB8, GPIOB, 8, 'B', false},
 #endif
+#ifdef PB15  // LQFP48 only (validation on the known split board)
+  {PB9, GPIOB, 9, 'B', false},  {PB10, GPIOB, 10, 'B', false}, {PB11, GPIOB, 11, 'B', false},
+  {PB12, GPIOB, 12, 'B', false}, {PB13, GPIOB, 13, 'B', false}, {PB14, GPIOB, 14, 'B', false},
+  {PB15, GPIOB, 15, 'B', false},
+  {PC13, GPIOC, 13, 'C', false}, {PC14, GPIOC, 14, 'C', false}, {PC15, GPIOC, 15, 'C', false},
+  {PF4, GPIOF, 4, 'F', false},  {PF5, GPIOF, 5, 'F', false},  {PF6, GPIOF, 6, 'F', false},
+  {PF7, GPIOF, 7, 'F', false},
+#endif
   {PF0, GPIOF, 0, 'F', false}, {PF1, GPIOF, 1, 'F', false},
 };
 static const uint32_t N = sizeof(PINS) / sizeof(PINS[0]);
-static const uint32_t MAX = 32;
+static const uint32_t MAX = 40;
+static_assert(sizeof(PINS) / sizeof(PINS[0]) <= MAX, "too many pins");
 
 // layout mirrored in tools/pin_scan.py
 struct Scan {
@@ -53,7 +62,7 @@ struct Scan {
   uint16_t freq_hz[MAX];    // toggle frequency in modes 1 and 2
   uint32_t tick_hz;         // time base rate measured against delay(): the toggle periods are computed from it
 };
-static_assert(sizeof(Scan) == 280, "layout mirrored in tools/pin_scan.py");
+static_assert(sizeof(Scan) == 344, "layout mirrored in tools/pin_scan.py");
 volatile Scan scan;
 
 // Time base: DWT cycle counter on the Cortex-M3 (F130); the Cortex-M23 (E230) has none: TIMER2 free-running, 16 bit
@@ -149,7 +158,7 @@ void setup() {
   for (uint32_t i = 0; i < N; i++) {
     scan.port[i] = PINS[i].name;
     scan.bit[i] = PINS[i].bit;
-    uint32_t base = PINS[i].name == 'A' ? 10 : PINS[i].name == 'B' ? 30 : 50;
+    uint32_t base = PINS[i].name == 'A' ? 10 : PINS[i].name == 'B' ? 30 : PINS[i].name == 'F' ? 50 : 60;
     scan.freq_hz[i] = (uint16_t)((base + PINS[i].bit) * 100);
   }
   scan.mode = 0;

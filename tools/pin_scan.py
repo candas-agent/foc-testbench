@@ -7,7 +7,7 @@ it only switches the internal pull-up / pull-down.
   python tools/pin_scan.py --elf <elf> --all        # every pin toggles its pull at its own frequency
   python tools/pin_scan.py --elf <elf> --pin PA7    # only PA7 toggles (confirmation)
   python tools/pin_scan.py --elf <elf> --stop       # back to idle (all pull-down)
-Frequency on the scope -> pin: (base + n) * 100 Hz, base A=10, B=30, F=50 (PA7 1.7 kHz, PB1 3.1 kHz, PF0 5.0 kHz).
+Frequency on the scope -> pin: (base + n) * 100 Hz, base A=10, B=30, F=50, C=60 (PA7 1.7 kHz, PB1 3.1 kHz, PF0 5.0 kHz).
 Classes: "free" = follows the pull (nothing drives it: gate driver input, unused pin, connector),
 "low" / "high" = held by something stronger than ~40 kOhm (op amp output, divider, pull resistor, ground...).
 """
@@ -22,10 +22,11 @@ import time
 
 GDB = sorted(glob.glob(os.path.expanduser("~/.platformio/packages/toolchain-gccarmnoneeabi*/bin/arm-none-eabi-gdb.exe")))
 MAGIC = 0x5C4A0001
-MAX = 32
-OFF = {"magic": 0, "mode": 4, "only": 8, "done": 12, "count": 16, "port": 20, "bit": 52, "rd_down": 84,
-       "rd_up": 116, "adc_mv": 148, "freq_hz": 212, "tick_hz": 276}
-SIZE = 280
+MAX = 40
+OFF = {"magic": 0, "mode": 4, "only": 8, "done": 12, "count": 16, "port": 20, "bit": 20 + MAX,
+       "rd_down": 20 + 2 * MAX, "rd_up": 20 + 3 * MAX, "adc_mv": 20 + 4 * MAX, "freq_hz": 20 + 6 * MAX,
+       "tick_hz": 20 + 8 * MAX}
+SIZE = 24 + 8 * MAX
 
 
 def scan_address(elf):
