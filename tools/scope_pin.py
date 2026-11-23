@@ -52,15 +52,24 @@ def pin_of(f):
     return None
 
 
+def num(s, q):
+    """Rigol answers 'measure error!' or 9.9E37 when a measurement is not possible: None."""
+    try:
+        v = float(s.query(q))
+    except ValueError:
+        return None
+    return v if v < 1e30 else None
+
+
 def reading(s):
     """Tries the scales from large to small, keeps the first one with a valid frequency and a usable amplitude."""
     best = None
     for sc in SCALES:
         s.write(f":CHAN1:SCAL {sc}")
         time.sleep(0.6)
-        f = float(s.query(":MEAS:ITEM? FREQ,CHAN1"))
-        vpp = float(s.query(":MEAS:ITEM? VPP,CHAN1"))
-        if f < 1e30 and vpp < 1e30 and vpp < 7 * sc:  # valid and not clipped (8 divisions on screen)
+        f = num(s, ":MEAS:ITEM? FREQ,CHAN1")
+        vpp = num(s, ":MEAS:ITEM? VPP,CHAN1")
+        if f is not None and vpp is not None and vpp < 7 * sc:  # valid and not clipped (8 divisions on screen)
             best = (f, vpp, sc)
             if vpp > 2 * sc:  # at least 2 divisions: good enough
                 break
