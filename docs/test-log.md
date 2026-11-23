@@ -1504,3 +1504,20 @@ Envs gd32cl_base (dev-gd32 02b2e02) / gd32cl_3, cloud runs 45135285658 / 4513618
   loopFOC base 163.2 / 163.0 us, point 3 163.1 / 163.0 us; total 207.5 / 207.5 vs 207.7 / 207.3 us: no difference.
 - Point 1 (cleanup/gd32-commented-code d1fc833): firmware.bin byte-identical to the base (48204 B).
 - tools/sampling_sweep.py: writes gd32_timer_sampling_point, or sampling_point in older firmwares.
+
+## 2026-11-23: GD32 cleanup point 4, SIMPLEFOC_GD32_ADC_INTERRUPT (candas-agent cleanup/gd32-adc-interrupt 9db70b8)
+
+Envs gd32cl4_base (dev-gd32 f930f7d) / gd32cl_4 / gd32cl_4it (= gd32cl_4 + `-D SIMPLEFOC_GD32_ADC_INTERRUPT`),
+cloud run 45138317372, 26 V. `ADC_USE_INTERRUPT` (commented define) becomes the build flag, filter
+`PHASE_CURRENT_FILTER` removed (raw values, as STM32), `adc_val` static volatile [3], only with the flag.
+- Without the flag: firmware.bin byte-identical to the base (48188 B). With the flag: 48404 B (+216 B), RAM +12 B;
+  `ADC_CMP_IRQHandler` of the driver replaces the weak one of the core. First time this path was ever compiled.
+- Motor disabled (pyOCD): ADC CTL0 0x180 (EOICIE set), NVIC ISER0 bit 12 set; `adc_val` follows IDATA0/1
+  (e.g. 2320/2270), 3rd value 0 (2 current pins).
+- Loop time (`tools/loop_time.py`, current mode 1 A 2 rad/s, alternated, local data/gd32cl4_loop.csv):
+  loopFOC with interrupt 168.0 / 167.9 us, without 162.9 / 163.0 us (+5 us, +3 %: ~3.4 interrupts per loop at
+  16 kHz); total 213.6 / 213.5 vs 207.2 / 207.5 us. Max loopFOC 217 / 239 us with vs 174.5 us without: not explained
+  (an interrupt costs a few us; maybe micros() read across the interrupt), not investigated.
+- Currents (`tools/ol_run.py`, same point): ia/ib fundamental 1.007/0.996 A without, 1.009/0.973 A with; residual
+  0.197/0.224 vs 0.195/0.227 A; sensor - open loop angle 70.1 vs 70.0 deg el.: same.
+- Board left on gd32cl_4it, 26 V, motor disabled.
