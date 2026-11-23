@@ -1547,3 +1547,6 @@ Cloud run 45141797236, no flashing:
   (~0x90A / 0x8DF on both). Loop code still below 0x08008000 (`__fast_end` 0x080069A4, +16 B after
   `_driverSyncLowSide`). Failure path of B (other driver type) not run. loopFOC not measured (motor would run).
   Board left on gd32cl_6c.
+- Loop time (`tools/loop_time.py`, motor run 1 A 2 rad/s with the user's go, alternated, data/gd32cl6_loop.csv):
+  loopFOC base 163.3 / 162.9 us, gd32cl_6c 162.9 / 163.0 us; max 174.6 / 174.3 vs 174.9 / 174.7 us; total
+  207.8 / 207.4 vs 207.2 / 207.6 us: no difference. Board left on gd32cl_6c, 26 V, motor disabled.
