@@ -1588,3 +1588,13 @@ Example copied unchanged from dev-gd32 952ebb5 (flash 49 600 bytes, RAM 4 680), 
 - Torque 0.3 A, 2 s: iq 0.27-0.33 A, uq 0.86 V, wheel did not move. 0.5 A: wheel started, 8.6 rad/s after 0.8 s
   (cut by the tool), uq 3.11 V (~0.36 V per rad/s, bench 0.354).
 - Board back on gd32cl_6c (cloud 45145849155), 26 V.
+
+## 23/11 : PHASE_HI / PHASE_LO fix in normal operation (envs gd32ph_dev 952ebb5 / gd32ph_pr 3c8b8ef, cloud 45194097902)
+Bench firmware, 26 V, data/2026-11-23_phase. Flash 48 204 -> 48 196 B (-8), RAM same.
+- Registers (phase_state.py): 0x1888 / 0x1DDD / 0x1888 on both.
+- Current mode 1 A 2 rad/s (fundamental from ol_run CSV): ia 1.019 / 1.021 A, ib 0.964 / 0.990 A. No fault.
+- Open loop 1.2 V 0.5 rad/s, 3 runs each, in run order: dev 0.697/0.675, 0.691/0.703, 0.705/0.713 A;
+  PR 0.676/0.642, 0.676/0.679, 0.716/0.684 A (ia/ib): ranges overlap, run-to-run spread ~±3 % (as for #27).
+- Loop time (loop_time.py, 1 A 2 rad/s, alternated dev/PR/dev/PR): loopFOC 162.9 / 163.0 vs 163.4 / 163.3 us
+  (+0.4 us, +0.25 %), total 207.4 / 207.4 vs 207.9 / 207.8 us; max loopFOC 174.3-174.9 on both.
+- Board back on gd32cl_6c, 26 V, motor disabled.
