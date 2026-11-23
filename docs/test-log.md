@@ -1521,3 +1521,13 @@ cloud run 45138317372, 26 V. `ADC_USE_INTERRUPT` (commented define) becomes the 
 - Currents (`tools/ol_run.py`, same point): ia/ib fundamental 1.007/0.996 A without, 1.009/0.973 A with; residual
   0.197/0.224 vs 0.195/0.227 A; sensor - open loop angle 70.1 vs 70.0 deg el.: same.
 - Board left on gd32cl_4it, 26 V, motor disabled. Merged as Candas1/Arduino-FOC#32 (a13d04d on dev-gd32).
+
+## 2026-11-23: GD32 cleanup point 5, driver and current sense limited to the GD32F1x0 (candas-agent cleanup/gd32-f1x0-only 225b739)
+
+Candas1/Arduino-FOC#33. Guards `_GD32_DEF_ && GD32F1x0` in driver gd32_mcu.h/.cpp and current sense gd32_mcu.h.
+Cloud run 45141797236, no flashing:
+- GD32F130 bench firmware: `gd32cl5_base` (dev-gd32 a13d04d) and `gd32cl_5`: firmware.bin byte-identical, 48 188 B.
+- GD32F103RC check sketch (src/gd32check, envs `gd32chk_base` / `gd32chk_5`): dev-gd32 compiles on the F103 and links
+  the GD32 `_configure6PWM` (T) and `timer_break_config` (text 30 308 B): init would succeed without PWM
+  (PIN_MODE_AF = input on F10x). With the PR: generic weak `_configure6PWM` (W), no GD32 timer code (text 27 920 B).
+  Not run (no GD32F103 board). `_readRegularADCVoltage` call on F103 not compiled.
