@@ -1598,3 +1598,13 @@ Bench firmware, 26 V, data/2026-11-23_phase. Flash 48 204 -> 48 196 B (-8), RAM 
 - Loop time (loop_time.py, 1 A 2 rad/s, alternated dev/PR/dev/PR): loopFOC 162.9 / 163.0 vs 163.4 / 163.3 us
   (+0.4 us, +0.25 %), total 207.4 / 207.4 vs 207.9 / 207.8 us; max loopFOC 174.3-174.9 on both.
 - Board back on gd32cl_6c, 26 V, motor disabled.
+
+## 23/11 : GD32E230 build check (envs gd32e230_example_dev / gd32f130_example_dev, dev-gd32 66eb425, cloud 45249459019)
+Example gd32_split_hoverboard (src/example_split), build only. Both builds succeed, but on genericGD32E230C8 the GD32
+driver is not compiled (condition `GD32F1x0`): `_configure6PWM`, `_configureADCLowSide`, `_writeDutyCycle6PWM`,
+`_driverSyncLowSide`, `_readADCVoltageLowSide` are the weak stubs (`W` in nm), so the firmware would do nothing.
+- arm-none-eabi-size text/data/bss: E230 53 924 / 936 / 3 768, F130 48 644 / 940 / 3 768 (E230 +5.3 kB with
+  the driver missing: Cortex-M23 code and core, to look at once the driver builds).
+- Board photo (simplefoc-work #39): MCU marked E230K8 = GD32E230K8, QFN32. No PB2, PB8-PB15, PC13-15 on this
+  package: none of RoboDurden's E230 layouts (2-3-1..3, 2-4-1, 2-x-y, all LQFP48) fits. TIMER0 complementary
+  outputs in QFN32 (core variant): only PA7 / PB0 / PB1 (CH0N-CH2N, AF2), with PA8-PA10. ADC: PA0-PA7, PB0, PB1.
