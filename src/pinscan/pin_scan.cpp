@@ -123,6 +123,7 @@ static void classify() {
     if (PINS[i].adc) {
       pinMode(PINS[i].arduino, INPUT);  // no pull for the ADC reading
       delay(2);
+      analogRead(PINS[i].arduino);  // the core returns the previous conversion (seen on the split board): read twice
       scan.adc_mv[i] = (uint16_t)(analogRead(PINS[i].arduino) * 3300UL / 1023UL);
     } else {
       scan.adc_mv[i] = 0xFFFF;
