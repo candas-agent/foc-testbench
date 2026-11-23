@@ -11,6 +11,10 @@ Traps that cost time on this bench, with the way around them. One line each; det
 - **GD32E230K8 board (#39): SWD does not answer** (original firmware probably disables it), and `catch_halt.py`
   cannot work on the ST-Link 3.3 V: plugging the board 3.3 V resets the ST-Link (inrush, USB disconnect sound),
   so the probe is never ready when the MCU starts. Use a separate 3.3 V supply, NRST (QFN32 pin 4) or BOOT0 (pin 31).
+- **pyOCD hangs when the Rigol is on USB** (WinUSB, probe enumeration): pin_scan.py and other pyOCD tools block.
+  Unplug the Rigol USB, or write the variables with OpenOCD `mww`.
+- **Scope ground**: the GND pin of the split board serial connector is not a clean ground for the scope (1.8 V of
+  noise against the SWD G). Clip on a sure ground; check it first by reading the 3.3 V pin (flat 3.3 V expected).
 - Only one tool on the ST-Link at a time (pyOCD, OpenOCD or an upload).
 - Disconnect the ST-Link 3.3 V when the board is supplied.
 - GD32F130 bus voltage is read at start-up only: when the 26 V arrives with the board already on, reset by software

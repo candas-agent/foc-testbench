@@ -1614,4 +1614,8 @@ driver is not compiled (condition `GD32F1x0`): `_configure6PWM`, `_configureADCL
 PA8-10 (high side) held low, PB13-15 (low side, active low) held high, halls PB11 / PF1 / PC14 held high (board
 pull-ups), PB0 / PB1 driven at 1.94 / 1.97 V (current op amp at rest), PB2 (self hold) low, PA4 (bus voltage) 58 mV,
 PA5 high 3.29 V. The core analogRead returns the previous conversion: first build showed every ADC value one pin
-late; fixed by reading twice. Toggle mode (--all) started; scope check by Candas1 pending.
+late; fixed by reading twice. Toggle mode (--all) started, then single pins (--pin) through OpenOCD: no usable scope reading (Rigol DS1104Z
+over USB, tools/scope_pin.py). Ground clip on the serial connector GND gave a noisy, offset reference (3.3 V pin
+read 4.16 V, then 2.14 V with the clip on the ST-Link GND wire): the scope setup, not the scan, is in doubt.
+Next: a "touch" mode (pin levels watched by the MCU, point touched through 1 kOhm to GND or 3.3 V), no scope.
+Board back on gd32cl_6c (cloud 45145849155), 26 V off.
