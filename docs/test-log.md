@@ -1531,3 +1531,10 @@ Cloud run 45141797236, no flashing:
   the GD32 `_configure6PWM` (T) and `timer_break_config` (text 30 308 B): init would succeed without PWM
   (PIN_MODE_AF = input on F10x). With the PR: generic weak `_configure6PWM` (W), no GD32 timer code (text 27 920 B).
   Not run (no GD32F103 board). `_readRegularADCVoltage` call on F103 not compiled.
+
+## 23/11 — GD32 cleanup point 6 (readability), compile only
+- candas-agent cleanup/gd32-readability: b3624d1 (A: local params variables, no break after return, `{0}`),
+  6fc43e8 (B: `_driverSyncLowSide` fails if driver params are 0, SIMPLEFOC_DRIVER_INIT_FAILED or not 6PWM).
+- Cloud 45144925553: gd32cl6_base = gd32cl_6a byte-identical (48 188 B); with SIMPLEFOC_GD32_ADC_INTERRUPT
+  gd32cl6_base_it = gd32cl_6a_it (48 404 B). gd32cl_6 48 204 B (+16), only `_driverSyncLowSide` differs in the
+  disassembly. Not flashed yet.
