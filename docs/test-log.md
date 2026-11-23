@@ -1492,3 +1492,15 @@ tested `!= 1`. `tools/phase_state.py` (CHCTL2 motor disabled, enabled at 0 V, di
   |---|---|---|
   | dev-gd32 | **0 %** / 34 % / 34 % | **1.796 A** (442 reads) |
   | fix | 34 % / 33 % / 34 % | 0.471 A (400 reads; 0.286 A in a first shorter run: noise of ia + ib) |
+
+## 2026-11-23: GD32 cleanup point 3, static functions and gd32_timer_sampling_point (candas-agent cleanup/gd32-static-sampling-point ddc2745)
+
+Envs gd32cl_base (dev-gd32 02b2e02) / gd32cl_3, cloud runs 45135285658 / 45136186253, 26 V.
+- Flash 48204 -> 48188 B (-16 B): `_findTimerPin` and `_deadTimeRegister` inlined in `_configure6PWM`; a clone of
+  `_setSinglePhaseState` without the unused `channel2` argument (`_writeDutyCycle6PWM` 0xB4 -> 0xB0 B).
+- Registers (`tools/gd32_drv_regs.py`, motor disabled): identical, except TIMER0.CTL0 0xB1 / 0xA1 = counting
+  direction bit (6 reads of the same firmware: 5 x 0xB1, 1 x 0xA1).
+- Loop time (`tools/loop_time.py`, current mode 1 A 2 rad/s, A/B alternated, local data/gd32cl3_loop.csv):
+  loopFOC base 163.2 / 163.0 us, point 3 163.1 / 163.0 us; total 207.5 / 207.5 vs 207.7 / 207.3 us: no difference.
+- Point 1 (cleanup/gd32-commented-code d1fc833): firmware.bin byte-identical to the base (48204 B).
+- tools/sampling_sweep.py: writes gd32_timer_sampling_point, or sampling_point in older firmwares.
