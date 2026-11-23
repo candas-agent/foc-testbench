@@ -1558,3 +1558,14 @@ Cloud run 45141797236, no flashing:
   `git diff -w` = 5 removed blank lines only.
 - Cloud 45148693458: gd32cl2_base / gd32cl_2 48 204 B, _it 48 420 B, _pb12 (`TIMER_BLDC_EMERGENCY_SHUTDOWN_PIN=PB12`)
   48 236 B: all three pairs byte-identical (cmp). Not flashed (no need). Polarity flags not built.
+
+## 23/11 : GD32 PHASE_HI / PHASE_LO (candas-agent fix/gd32-phase-hi-lo 3c8b8ef vs dev-gd32 952ebb5)
+Firmware src/phasecheck (driver only), cloud run 45188355727, board on the ST-Link 3.3 V (main supply off, Vbus read
+1.60 V), duty 0.3, tools/phase_hilo.py (CHCTL2 + 400 samples of the pin levels). Low side pins active low.
+- dev-gd32: HI and LO = ON (CHCTL2 0x0DDD, both pins of each phase switching). ON 0x0DDD, OFF 0x0888 (pins 0 % / 100 %).
+- PR: ON 0x0DDD and OFF 0x0888 unchanged. HI 0x0999: high pin ~31 % high, low pin 100 % high (low MOSFET off).
+  LO 0x0CCC: high pin 0 %, low pin ~73 % high, i.e. low MOSFET on ~27 % = the duty cycle (not 1 - duty as in ON):
+  with CHxEN = 0 and CHxNEN = 1 the timer outputs the reference without inversion (same timer bits as STM32 hardware
+  6PWM, which also disables only the high channel). Mixed HI/LO/OFF and LO/OFF/HI: each phase as above.
+- Flash 15 984 -> 15 972 bytes. Loop time not measured (2 CHCTL2 reads per phase instead of 1).
+- Board back on gd32cl_6c (cloud 45145849155). Flash with OpenOCD (pyOCD -t cortex_m does not program the flash).
