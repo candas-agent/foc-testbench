@@ -1485,3 +1485,10 @@ tested `!= 1`. `tools/phase_state.py` (CHCTL2 motor disabled, enabled at 0 V, di
   0.691 / 0.686 A. Same as before. Trapezoidal modulation (PHASE_OFF per sector) not tested.
 - **Wheel turned by hand, motor disabled** (user): with dev-gd32 one phase catches (low side of phase C on, current
   through it and the body diodes of the other low sides); with the fix the wheel turns freely.
+- **Trapezoid_120, open loop 1.2 V 0.5 rad/s, 5 s** (`tools/trap_test.py`, bench overcurrent cut raised to 100 A for
+  the run with the user's OK: the floating phase reads nonsense with R_ds_on sensing and tripped it at once; the
+  script cuts on the driven phases only, 5 reads in a row; supply 1 A limit):
+  | | CH0 (C) / CH1 (B) / CH2 (A) off | ic rms while C should float (sectors 1, 4) |
+  |---|---|---|
+  | dev-gd32 | **0 %** / 34 % / 34 % | **1.796 A** (442 reads) |
+  | fix | 34 % / 33 % / 34 % | 0.471 A (400 reads; 0.286 A in a first shorter run: noise of ia + ib) |
