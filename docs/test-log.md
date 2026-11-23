@@ -1541,3 +1541,9 @@ Cloud run 45141797236, no flashing:
 - C (e1f98f8: unused `resolution`/`channel2` parameters and `_UNUSED(phase_state)` removed, TIMER_CCX_ENABLE, comment),
   cloud 45145849155: gd32cl_6c byte-identical to gd32cl_6 (48 204 B); gd32cl_6c_it 48 420 B, disassembly vs
   gd32cl6_base_it: same instructions except `_driverSyncLowSide` (B) and the mangled name of `_setSinglePhaseState`.
+- On the board (26 V, motor disabled, never run): flashed gd32cl6_base then gd32cl_6c (OpenOCD). `gd32_drv_regs.py
+  --compare`: identical except TIMER0.CTL0 DIR bit (0xA1/0xB1, toggles by itself in center-aligned mode, re-read 6x).
+  CHCTL2 0x1888 on both (CH3EN set: `_driverSyncLowSide` passed the new check); ADC IDATA0/1 converting
+  (~0x90A / 0x8DF on both). Loop code still below 0x08008000 (`__fast_end` 0x080069A4, +16 B after
+  `_driverSyncLowSide`). Failure path of B (other driver type) not run. loopFOC not measured (motor would run).
+  Board left on gd32cl_6c.
