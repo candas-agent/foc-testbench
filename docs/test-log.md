@@ -1569,3 +1569,22 @@ Firmware src/phasecheck (driver only), cloud run 45188355727, board on the ST-Li
   6PWM, which also disables only the high channel). Mixed HI/LO/OFF and LO/OFF/HI: each phase as above.
 - Flash 15 984 -> 15 972 bytes. Loop time not measured (2 CHCTL2 reads per phase instead of 1).
 - Board back on gd32cl_6c (cloud 45145849155). Flash with OpenOCD (pyOCD -t cortex_m does not program the flash).
+
+## 23/11 : GD32 PHASE_HI / PHASE_LO under power (26 V, firmware src/phasebrake, gd32_brake_pr, cloud 45189684826)
+Fixed modes, the three phases in the same state, wheel turned by hand: OFF free; ON 0 % brakes very strongly; LO 0 %
+free; LO 95 % brakes weakly at hand speed, more when faster (boost: brakes once the back-EMF exceeds ~5 % of the bus,
+~4 rad/s), supply current dropped (energy back to the bus); HI 0 % free. LO 95 % pins under power: high sides 0 %,
+low sides on 95.1 % (CH compare 2137 / 2250). Added to Candas1/Arduino-FOC#37.
+
+## 23/11 : SimpleFOC example gd32_split_hoverboard on the board (env gd32_example_split, cloud 45191788080)
+Example copied unchanged from dev-gd32 952ebb5 (flash 49 600 bytes, RAM 4 680), 26 V, driven over SWD
+(tools/example_swd.py; its Commander is on Serial2, FTDI test left for later).
+- Init: motor_ready, driver and current sense initialised, hall alignment moved the motor: zero angle 2.094 rad,
+  direction CCW (= known 2.09 / CCW). Offsets ia 1.640 V, ib 1.610 V.
+- Target 0: iq mean -0.003 A std 0.169 A (peaks -0.67 / +0.35), id std 0.094 A, uq mean +0.31 V std 0.11 V
+  (R_ds_on sense noise -> audible hiss, loop in the audible range).
+- Loop period (age of LPF_current_q.timestamp_prev, 59 halted snapshots): ~465 us = ~2.1 kHz (loopFOC + move +
+  command.run, default flash placement, no fast math; bench loopFOC 163 us).
+- Torque 0.3 A, 2 s: iq 0.27-0.33 A, uq 0.86 V, wheel did not move. 0.5 A: wheel started, 8.6 rad/s after 0.8 s
+  (cut by the tool), uq 3.11 V (~0.36 V per rad/s, bench 0.354).
+- Board back on gd32cl_6c (cloud 45145849155), 26 V.
