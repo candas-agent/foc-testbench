@@ -1460,3 +1460,15 @@ data/2026-11-22_gd32drv/sampling_sweep*.csv. Reference: 0.65-0.70 A at 1.2 V, 1.
   left > 0.78 us, the currents stay valid at full voltage (motor.voltage_limit 0.58 Vbus = SVPWM linear limit). The
   margin is in us: at 25 kHz 0.03 of the period is 0.6 us < 0.78 us (lower driver.voltage_limit or sampling_point
   0.99-0.995, both measured correct). Only tested at 0.7-1.3 A; ringing at higher currents not seen (oscilloscope).
+
+## 2026-11-23: dev-gd32 merged with simplefoc dev (candas-agent update/dev-gd32-to-dev 98f890b), GD32F130 board
+
+Merge of simplefoc dev ae7b3ad (56 commits) into Candas1 dev-gd32 fda8110: no conflict, the hardware API implemented
+by the GD32 files is the same in master and dev; after the merge the branch = dev + the 4 GD32 files (+487 lines).
+Envs gd32drv_head (fda8110) / gd32drv_up (98f890b), cloud run 45128358641, 26 V:
+- Flash 47876 -> 47644 B (-232 B), RAM same. Registers: identical (TIMER0.CTL0 0xB1/0xA1 = DIR bit, read 6 times:
+  changes with the counting direction).
+- Open loop 1.2 V 0.5 rad/s: 0.657 / 0.656 A -> 0.673 / 0.659 A. Current mode 1 A 2 rad/s: iq 0.998 -> 0.999 A,
+  id 0.007 -> -0.007 A. No fault.
+- **Loop time: loopFOC 174.2 -> 163.3 us (-6.3 %), total 218.7 -> 207.8 us**: generic dev changes (double literals
+  and conversions replaced by float, 0542fb7 / 4ed8c6e, probably).
