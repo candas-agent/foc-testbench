@@ -1,19 +1,17 @@
-# FOC test bench: PWM dead-time compensation
+# FOC test bench
 
-Test bench to evaluate a PWM dead-time compensation for [SimpleFOC](https://github.com/simplefoc/Arduino-FOC) on a **B-G431B-ESC1** board driving a **hoverboard motor**, in open loop (no position sensor for now), with the MXLEMMING sensorless observer running in parallel.
+Firmware and tools to measure [SimpleFOC](https://github.com/simplefoc/Arduino-FOC) changes on real boards driving a
+**hoverboard motor**: B-G431B-ESC1, GD32F130 split board, gen 1 hoverboard mainboard (STM32F103RC / GD32F103RC).
+What it is used for: loop time and flash / RAM of a change against dev, on-target equivalence tests
+([docs/equiv-tests.md](docs/equiv-tests.md)), register dumps, current and speed traces, low speed campaigns.
 
-Background: the [PWM Deadtime compensation](https://community.simplefoc.com/t/pwm-deadtime-compensation/3767) thread on the SimpleFOC forum.
+Every library is pulled by PlatformIO at a pinned commit (see `platformio.ini`): a measurement can be rebuilt from
+the commit noted in [docs/test-log.md](docs/test-log.md), which holds all the results. Known traps of the tools and
+boards: [docs/pitfalls.md](docs/pitfalls.md).
 
-> ⚠️ Work in progress. The firmware changes under test have only been compile-checked so far, they have not been validated on hardware yet.
-
-## What is tested
-
-The code under test lives in two forks, pulled directly by PlatformIO:
-
-| Library | Branch | Content |
-|---|---|---|
-| [candas-agent/Arduino-FOC](https://github.com/candas-agent/Arduino-FOC/pull/1) | `feat/deadtime-compensation` | dead-time compensation + automatic calibration |
-| [candas-agent/Arduino-FOC-drivers](https://github.com/candas-agent/Arduino-FOC-drivers/pull/1) | `fix/mxlemming-checks` | MXLEMMING observer parameter checks, `fabsf` |
+It started as the bench of the PWM dead-time compensation
+([forum thread](https://community.simplefoc.com/t/pwm-deadtime-compensation/3767),
+[candas-agent/Arduino-FOC#2](https://github.com/candas-agent/Arduino-FOC/pull/2)), hence the `D` commands below.
 
 ### Dead-time compensation in a nutshell
 
@@ -26,8 +24,6 @@ The compensation adds `±deadtime_compensation` to each phase voltage in the dir
 - with the default (setpoints), the compensation is exactly 0 at zero torque, so it cannot cause vibrations when the motor is moved by hand at zero torque.
 
 `motor.calibrateDeadtimeCompensation(max_current)` measures the effective dead-time voltage error: a DC voltage is applied on the d axis (rotor aligned, no movement) in both directions, a line `U = R·I + U0` is fitted, and `deadtime_compensation = 3/4 · U0` (the three phase errors seen on the alpha axis add up to 4/3 of one phase error).
-
-Overview of all the topics explored with this bench (bugs, performance, features, branches and PRs): [docs/topics.md](docs/topics.md). Measurements: [docs/test-log.md](docs/test-log.md).
 
 ## Hardware
 
@@ -64,7 +60,7 @@ the project builds on any machine. Only `lib/qfplib` (GPL, envs `*_qfp`) has to 
 - `ALIGN_VOLTAGE` 0.8 V (≈1.5 A on this board, see the test log); DC link voltage gain 29.3 (calibrated on one board, EFeru's default calibration gives 33).
 - Do not add `-D SIMPLEFOC_STM32_ADC_INTERRUPT` with SimpleFOC dev: the F1 HAL disables the injected interrupt and the currents freeze (fixed in [simplefoc/Arduino-FOC#594](https://github.com/simplefoc/Arduino-FOC/pull/594)).
 - Velocity PI that works on this slower loop (~400 µs): `MVP0.4`, `MVI1`, `MVF0.01`.
-- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `XG0` / `XG7[,loops]` invalid hall state 000 / 111 injected for 1 (or n) control loops (test of docs/audit-dev.md #10), `XR1` / `XR0` plain SimpleFOC behaviour (the bench no longer sets the voltage limit every loop nor forces foc_current) / bench behaviour, `XK0`..`XK3` voltage feed-forward (off, back-EMF, + R*i, + dq decoupling), `XM<V>[,<comp>]` `characteriseMotor(V)` with the dead-time compensation optionally forced along +d (the bench overcurrent cut does not run during it), `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
+- Extra commands: `ST0`/`ST1`/`ST2` sensor (SmoothingSensor / measured hall table / ideal grid), `SV0`..`SV4` velocity estimate of the table sensor, `XF<A>` friction feed-forward, `XG0` / `XG7[,loops]` invalid hall state 000 / 111 injected for 1 (or n) control loops (test of the dev hall glitch bug), `XR1` / `XR0` plain SimpleFOC behaviour (the bench no longer sets the voltage limit every loop nor forces foc_current) / bench behaviour, `XK0`..`XK3` voltage feed-forward (off, back-EMF, + R*i, + dq decoupling), `XM<V>[,<comp>]` `characteriseMotor(V)` with the dead-time compensation optionally forced along +d (the bench overcurrent cut does not run during it), `V<rad/s>` / `VO` velocity through a position ramp. Tools: `tools/hall_calib.py` (hall edge calibration, the motor turns slowly), `tools/lowspeed_campaign.py` (low speed comparison).
 
 ### Safety
 
@@ -206,10 +202,10 @@ python tools/ol_run.py --port COM8 --mode current --current 1 --speed 2 --durati
 | `tools/ol_run.py ... --out run.csv` | yes | live reads to CSV, current fundamental fitted on the open loop angle, `--equal` (DE1), `--ramp` |
 | `tools/fold_compare.py a.csv b.csv --labels ...` | no | waveforms from `ol_run.py --out` folded on the angle: THD, zero crossing share, plot |
 | `tools/zero_torque.py --port rtt --env gd32f130 --comp 0.605 --threshold 1.22` | yes (closed loop, hall board) | zero torque test: no compensation / DM0 / DM1, 20 s each, the motor beeps N times before phase N |
-| `tools/equiv_read.py --elf <equiv_pid/pwm elf>` | no (`equiv_pwm_*`: main supply off) | on-target equivalence of PR code vs dev, see [docs/audit-dev.md](docs/audit-dev.md) |
+| `tools/equiv_read.py --elf <equiv_pid/pwm elf>` | no (`equiv_pwm_*`: main supply off) | on-target equivalence of PR code vs dev, see [docs/equiv-tests.md](docs/equiv-tests.md) |
 | `tools/equiv_foc_compare.py --dev <elf> --pr <elf> [--pins <elf>]` | no | loopFOC scenarios with a fake clock, dev vs PR traces |
 | `tools/equiv_audit_read.py --elf <equiv_audit elf>` | no | audit of SimpleFOC dev functions on the target (fake driver / sensors / clock, simulated motor) |
-| `tools/bug_repro.py --elf <elf> --scenario mlu\|mlc\|mwt\|mlv\|olneg\|hall\|dt596` | yes (low values, abort above 3 A / 10 rad/s) | reproduces the bugs of docs/audit-dev.md on the powered board, reads the applied duty cycles from TIM1 |
+| `tools/bug_repro.py --elf <elf> --scenario mlu\|mlc\|mwt\|mlv\|olneg\|hall\|dt596` | yes (low values, abort above 3 A / 10 rad/s) | reproduces the dev bugs of docs/equiv-tests.md on the powered board, reads the applied duty cycles from TIM1 |
 | `tools/ff_test.py --elf <elf> [--pi P,I,Tf ...] [--modes 0 2]` | yes (+-3 rad/s) | velocity steps with each voltage feed-forward mode, current setpoint recorded |
 
 ## Reading the board memory with pyOCD

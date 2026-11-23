@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Reproduces the bugs of docs/audit-dev.md on the powered STM32F103 board: THE MOTOR MOVES (low values).
+Reproduces the dev bugs of docs/equiv-tests.md on the powered STM32F103 board: THE MOTOR MOVES (low values).
 Each scenario sends bench / SimpleFOC commands through RTT, holds each step a given time while reading dbg
 (uq, iq, phase currents, velocity, enabled) and prints a summary per step: does the target still change something,
 does ME0 stop the motor, what happens at the next ME1. Some steps also start the recorder (one sample per loop).

@@ -1,5 +1,5 @@
 // Test only (command XG): forces an invalid hall state (000 or 111) as if the sensors glitched, then restores the
-// real pin states, to reproduce docs/audit-dev.md bug #10 on the board. The HallSensor state is private: this file
+// real pin states, to reproduce the dev hall glitch bug on the board (docs/equiv-tests.md). The HallSensor state is private: this file
 // (and only this one) opens it.
 #include <Arduino.h>
 #define private public

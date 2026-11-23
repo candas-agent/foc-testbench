@@ -58,7 +58,7 @@ static void hallC() { hall.handleC(); hallLog(); }
 #endif
 int sensor_aligned = 0;
 #ifdef HALL_A_PIN
-// XG<state>[,<loops>]: invalid hall state injected for some loops (hall_glitch.cpp, docs/audit-dev.md #10)
+// XG<state>[,<loops>]: invalid hall state injected for some loops (hall_glitch.cpp, see docs/equiv-tests.md)
 void hall_glitch_set(HallSensor& h, int state);
 void hall_glitch_restore(HallSensor& h);
 static volatile int glitch_pending = 0, glitch_state = 0, glitch_loops = 1, glitch_left = 0;
@@ -112,7 +112,7 @@ static bool isOpenLoop() {
 // In open loop (voltage mode) the voltage amplitude is the voltage limit: it is set from openloop_voltage,
 // optionally lowered to keep the same fundamental amplitude with and without compensation.
 // In the other modes the voltage limit is FOC_VOLTAGE_LIMIT.
-// XR1: plain SimpleFOC behaviour for bug reproduction (docs/audit-dev.md): the bench no longer sets the voltage
+// XR1: plain SimpleFOC behaviour for bug reproduction (docs/equiv-tests.md): the bench no longer sets the voltage
 // limit every loop nor forces foc_current in closed loop. XR0 (default) restores the bench behaviour.
 static int raw_simplefoc = 0;
 // XK<n>: voltage feed-forward in foc_current, computed before each loopFOC (feed_forward_voltage, SimpleFOC dev):
