@@ -1483,3 +1483,5 @@ tested `!= 1`. `tools/phase_state.py` (CHCTL2 motor disabled, enabled at 0 V, di
   (CH3 = ADC trigger stays on, no pin).
 - Motor with the fix: current mode 1 A 2 rad/s iq 1.002 A, id 0.004 A, ia / ib 1.001 / 0.978 A; open loop 1.2 V
   0.691 / 0.686 A. Same as before. Trapezoidal modulation (PHASE_OFF per sector) not tested.
+- **Wheel turned by hand, motor disabled** (user): with dev-gd32 one phase catches (low side of phase C on, current
+  through it and the body diodes of the other low sides); with the fix the wheel turns freely.
