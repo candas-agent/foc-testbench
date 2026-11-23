@@ -1472,3 +1472,14 @@ Envs gd32drv_head (fda8110) / gd32drv_up (98f890b), cloud run 45128358641, 26 V:
   id 0.007 -> -0.007 A. No fault.
 - **Loop time: loopFOC 174.2 -> 163.3 us (-6.3 %), total 218.7 -> 207.8 us**: generic dev changes (double literals
   and conversions replaced by float, 0542fb7 / 4ed8c6e, probably).
+
+## 2026-11-23: GD32 driver PHASE_OFF did not disable channel 0 (candas-agent fix/gd32-phase-off-ch0 2df1be4)
+
+`_isChannelEnabled` returns the raw enable bit (1 / 0x10 / 0x100 for CH0 / CH1 / CH2) and the PHASE_OFF branch
+tested `!= 1`. `tools/phase_state.py` (CHCTL2 motor disabled, enabled at 0 V, disabled again):
+- dev-gd32 b44e45c (gd32drv_up): 0x188D / 0x1DDD / 0x188D: **CH0 + CH0N stay enabled when disabled** (phase C, PA8 /
+  PB13 on the split board, keeps switching at 0 % = low side on), CH1 / CH2 off.
+- fix `!= 0` (gd32drv_ch0, cloud 45130525364): 0x1888 / 0x1DDD / 0x1888: all three phase channels off when disabled
+  (CH3 = ADC trigger stays on, no pin).
+- Motor with the fix: current mode 1 A 2 rad/s iq 1.002 A, id 0.004 A, ia / ib 1.001 / 0.978 A; open loop 1.2 V
+  0.691 / 0.686 A. Same as before. Trapezoidal modulation (PHASE_OFF per sector) not tested.
