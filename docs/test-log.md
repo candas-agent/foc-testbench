@@ -1608,3 +1608,10 @@ driver is not compiled (condition `GD32F1x0`): `_configure6PWM`, `_configureADCL
 - Board photo (simplefoc-work #39): MCU marked E230K8 = GD32E230K8, QFN32. No PB2, PB8-PB15, PC13-15 on this
   package: none of RoboDurden's E230 layouts (2-3-1..3, 2-4-1, 2-x-y, all LQFP48) fits. TIMER0 complementary
   outputs in QFN32 (core variant): only PA7 / PB0 / PB1 (CH0N-CH2N, AF2), with PA8-PA10. ADC: PA0-PA7, PB0, PB1.
+
+## 23/11 : pin scan validated on the known split board (env pinscan_f130c8, cloud 45268772654)
+26 V off, ST-Link 3.3 V. Time base 71 999 450 Hz. Classification matches the known pinout (example_split):
+PA8-10 (high side) held low, PB13-15 (low side, active low) held high, halls PB11 / PF1 / PC14 held high (board
+pull-ups), PB0 / PB1 driven at 1.94 / 1.97 V (current op amp at rest), PB2 (self hold) low, PA4 (bus voltage) 58 mV,
+PA5 high 3.29 V. The core analogRead returns the previous conversion: first build showed every ADC value one pin
+late; fixed by reading twice. Toggle mode (--all) started; scope check by Candas1 pending.

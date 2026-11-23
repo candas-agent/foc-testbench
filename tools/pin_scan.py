@@ -85,7 +85,7 @@ def main():
             sys.exit("pin scan firmware not found (magic)")
         if a.all:
             t.write32(adr + OFF["mode"], 1)
-            print("all pins toggle; frequency -> pin: (base + n) * 100 Hz, base A=10, B=30, F=50. --stop to end")
+            print("all pins toggle; frequency -> pin: (base + n) * 100 Hz, base A=10, B=30, F=50, C=60. --stop to end")
         elif a.pin:
             i = pin_index(b, a.pin)
             t.write32(adr + OFF["mode"], 0)
