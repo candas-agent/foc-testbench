@@ -1651,3 +1651,28 @@ flashing). 72 MHz. PA4. Two runs each, identical within 1 cycle. Raw output: dat
   in the sequence pinMode -> get_adc_value; candidate: the EOC wait (continuous mode on, CTL1 0x1E9003) when the pin
   was just reconfigured. To measure before choosing (pinMode + get_adc_value together, EOC wait loop count).
 - ADC registers: CTL0 0x100, CTL1 0x1E9003 (ADCON, CTN, injected external trigger), SAMPT1 0x1000, RCU_CFG0 0x804800A.
+
+### Same day, second XA run: sequences, alternated pins, EOC wait (cloud 45470046275, Vbus 1.80 V)
+
+| mean cycles | dev | fast |
+|---|---|---|
+| `_readRegularADCVoltage` | 51047 | 5161 |
+| pinMode alone / get_adc_value alone | 23462 / 21176 | 537 / 370 |
+| pinMode + get_adc_value | 46678 | 4968 |
+| pinMode + conversion | 31908 | 4805 |
+| get_adc_value PA4 then PB1 (pair) | 42481 | 779 |
+| conversion with EOC counters, alone / after pinMode | 8506 / 36107 | 231 / 4838 |
+
+- **The EOC wait never waits**: EOC already set before the trigger 64/64 after pinMode (and 34-53/64 otherwise, even
+  right after clearing it), 0 to 0.5 loop turns. With the continuous mode on, EOC is set by the continuous
+  conversions (and the injected group): the read returns the last finished conversion, whatever its channel.
+- **Stale values when the read is fast**: fast build, get_adc_value PA4 then PB1 gives 79 / 78 (PB1 ~2452 expected);
+  with EOC cleared first 2454 / 78 (each read returns the other pin). The dev build gives 80 / 2452 (right) only
+  because ~20k cycles of slow flash pass between the channel write and the read; with EOC cleared first it is also
+  swapped (2451 / 78). So the current path is right only because it is slow; a faster read needs a real wait for a
+  conversion of the new channel.
+- The ~4.3k extra cycles of pinMode followed by a conversion (fast build) are not in the EOC loop (0 turns): one
+  access stalls, not found which. Not needed for the plan (pinMode goes away).
+- Slow flash timings depend on the layout: adding XA code moved dev from 44.7k to 51k cycles per read (pinMode
+  13k -> 23k, pin_in_pinmap 139 -> 4279). Compare only builds with the same layout.
+- First RTT attach after an OpenOCD flash can read dbg.magic 0 (start-up not finished): retry after ~3 s.
