@@ -1750,3 +1750,7 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Last retry with the SWD clock at 1 MHz (BENCH_SWD_HZ, 7c6a775): same AP error at the first dbg read after ME1.
   Systematic, not random. Changes since the good runs of 22/11: ST-Link wiring (E230 work), ST-Link firmware V2J37,
   Rigol on USB (ground loop through its probe ground if still clipped on the board?). See simplefoc-work#47.
+- **Other ST-Link** (pyOCD ID 54FF67065072495023531087): no AP error, the link held during the run -> #47 is the
+  first probe (or its V2J37 firmware). But gd32cl_6c, same run: **iq 0.43 A, uq pinned at 4.0 V**, ia / ib
+  fundamental 0.43 / 0.36 A, peak 1.57 A, no fault (reference 18/11: iq 0.999 A at uq 0.83 V). ~10x the normal
+  voltage for half the current: a phase badly connected (motor just reconnected)? Stopped, owner to check.
