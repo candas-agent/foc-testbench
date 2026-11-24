@@ -1716,3 +1716,15 @@ the fast flash too, SPL still slow). br_late = br without the start-up analogRea
   3247 before XAR moved the code).
 - Stopped after 2 of 5: adcdiag_br_late has no start-up Vbus read (BENCH_NO_VBUS_STARTUP), so its `X` gives nan and
   bench-runner could not check the bus before the next flash (correct stop). Board left on adcdiag_br_late.
+
+XAR, the other three firmwares (owner confirmed 26 V off for the flash from adcdiag_br_late; then 1.80 V reads):
+
+| firmware | analogRead alone, wrong pin1 / pin2 | our function (dev: the core path) alternated, wrong | mixed: function / analogRead |
+|---|---|---|---|
+| adcdiag_br | 0 / 0 | 0 / 0 | 0 / 0 |
+| adcdiag_fast (dev-gd32, core fast) | **9900 / 9863** | **9826 / 9824** | 9881+6565 / 3291 |
+| adcdiag_dev | 0 / 0 | 0 / 0 | 0 / 0 |
+
+- dev-gd32's `_readRegularADCVoltage` (core path) is wrong ~98 % of the time as soon as the core code runs fast,
+  like analogRead: confirms the diagnostic (right only because slow). The branch: 0 wrong in all 5 layouts.
+- Board back on gd32cl_6c (1.81 V).
