@@ -1740,3 +1740,7 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Step 1, known-good gd32cl_6c (e1f98f8), same run: **same result** (iq -0.001 A, uq 4.0 V / ud 3.85 V, ia/ib 0.015 /
   0.011 A, sensor angle constant 5.764). So the bench, not the firmware: with ~5.5 V applied and ~0 A, the phases
   are not driven or not connected; the hall angle does not move either. Owner to check the motor and hall connectors.
+- Motor connected, step 1 again on gd32cl_6c (Vbus 25.80 V): ol_run sent ME1, then the first dbg read failed with
+  `pyOCD TransferError: STLink error (18): AP error`; ME0 failed too (link lost), the heartbeat stopped the motor;
+  a new connection then read ME0 Status 0, no fault. First run tonight with real phase current: SWD disturbed by the
+  motor currents? (ST-Link wiring changed for the E230 boards on 23/11.) No measurement.
