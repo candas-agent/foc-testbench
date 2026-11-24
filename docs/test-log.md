@@ -1703,3 +1703,16 @@ the fast flash too, SPL still slow). br_late = br without the start-up analogRea
   write (EOC is set by the running conversions): it is right only if enough time passes in between, which depends on
   the layout and on the ADC state left by the previous read. Same mechanism as get_adc_value pair 78/78 (fast builds).
 - bench-runner flashed once after a `nan` Vbus read (board at 3.3 V, 1.80 V just before and after): rule tightened.
+
+### XAR (cloud 45480983501): the core's analogRead alone, PA4 / PB1 alternated x10000, then the mixed series
+
+| firmware | analogRead alone, wrong pin1 / pin2 | mixed: our reads wrong / analogRead wrong |
+|---|---|---|
+| adcdiag_br_fast | **9885 / 9848** | 0 / 3277 of 3334 |
+| adcdiag_br_late | 0 / 0 | 0 / 0 (3247 in the previous layout) |
+
+- **The core's analogRead is wrong on its own** when it runs fast enough (br_fast layout): the wrong reads of the
+  mixed series are not caused by our function. Whether analogRead is right depends on the layout (br_late: 0 now,
+  3247 before XAR moved the code).
+- Stopped after 2 of 5: adcdiag_br_late has no start-up Vbus read (BENCH_NO_VBUS_STARTUP), so its `X` gives nan and
+  bench-runner could not check the bus before the next flash (correct stop). Board left on adcdiag_br_late.
