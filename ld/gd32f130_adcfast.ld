@@ -67,7 +67,7 @@ SECTIONS
     *SEGGER_RTT*.o(.text*)
     *RTTStream.cpp.o(.text*)
     /* adcdiag_fast (simplefoc-work#22): the steps of _readRegularADCVoltage in the fast flash */
-    *adc_diag.cpp.o(.text*)
+    /* adc_diag.cpp (XA itself) stays in the slow flash since #22 part 2: 32 KB exceeded */
     *analog.cpp.o(.text*)
     *pinmap.c.o(.text*)
     *wiring_digital.c.o(.text*)
