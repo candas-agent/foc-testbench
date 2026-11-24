@@ -1619,3 +1619,35 @@ over USB, tools/scope_pin.py). Ground clip on the serial connector GND gave a no
 read 4.16 V, then 2.14 V with the clip on the ST-Link GND wire): the scope setup, not the scan, is in doubt.
 Next: a "touch" mode (pin levels watched by the MCU, point touched through 1 kOhm to GND or 3.3 V), no scope.
 Board back on gd32cl_6c (cloud 45145849155), 26 V off.
+
+## 2026-11-24: GD32F130 `_readRegularADCVoltage`, cycles of each step (Candas1/simplefoc-work#22)
+
+Envs `adcdiag_dev` (Candas1 dev-gd32 66eb425) and `adcdiag_fast` (same, with the core's analog.cpp, pinmap.c,
+wiring_*.c and PinMap_ADC in the first 32 KB; the SPL gd32f1x0_adc/gpio stayed in the slow flash: archive members,
+the linker pattern did not match them). Cloud run 45467965800. Command `XA`: each step called 64 times alone, DWT
+cycles minus the timer overhead, motor disabled, current sense initialised, 3.3 V only (Vbus 1.79 V read before
+flashing). 72 MHz. PA4. Two runs each, identical within 1 cycle. Raw output: data/2026-11-24_adcdiag/.
+
+| step (mean cycles) | dev (core in slow flash) | fast (core in fast flash) |
+|---|---|---|
+| `_readRegularADCVoltage` | **44726 (621 us)** | **7250 (101 us)** |
+| `analogRead` | 44595 | 7123 |
+| DIGITAL_TO_PINNAME | 4 | 4 |
+| pin_in_pinmap | 139 (min 66) | 66 |
+| pinMode INPUT_ANALOG | 13030 | 540 |
+| get_adc_value | 27407 | 371 |
+| - pinmap_peripheral | 144 (min 71) | 71 |
+| - get_adc_channel | 6394 | 93 |
+| - conversion (SPL, slow flash in both) | 201 | 202 |
+| float scale | 107 | 107 |
+| `_readRegularADCVoltage`, irq off | 44777 | 7255 |
+
+- The slow flash is 84 % of a read (44.7k -> 7.3k cycles when the core code is in the first 32 KB), as the PC
+  sampling of 22/11 (83 %). The penalty depends on the code shape: the small search loops (pin_in_pinmap,
+  pinmap_peripheral) and the SPL conversion cost the same in both, get_adc_channel (switch) is 69x slower, pinMode
+  24x, the body of get_adc_value ~20k cycles. The 0.8 ms of 22/11 was a loop time difference with the motor running.
+- The conversion itself (trigger, EOC wait, read) is ~200 cycles (2.8 us); interrupts are not the cause.
+- Not explained: the full read costs ~6k cycles (fast) / ~4k (dev) more than the sum of its steps timed alone. Only
+  in the sequence pinMode -> get_adc_value; candidate: the EOC wait (continuous mode on, CTL1 0x1E9003) when the pin
+  was just reconfigured. To measure before choosing (pinMode + get_adc_value together, EOC wait loop count).
+- ADC registers: CTL0 0x100, CTL1 0x1E9003 (ADCON, CTN, injected external trigger), SAMPT1 0x1000, RCU_CFG0 0x804800A.
