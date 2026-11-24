@@ -119,6 +119,24 @@ static void stale_check(Print& out) {
   delay(20);
 }
 
+// XAR: the core's analogRead alone, PA4 / PB1 alternated, then mixed with our reads (same firmware, same layout)
+static void analogread_check(Print& out) {
+  const int p1 = BENCH_ADC_DIAG_PIN, p2 = BENCH_ADC_DIAG_PIN2;
+  int r1 = 0, r2 = 0;
+  for (int i = 0; i < 3; i++) r1 = analogRead(p1);
+  for (int i = 0; i < 3; i++) r2 = analogRead(p2);
+  out.print(F("analogRead check, references [10 bit] pin1 ")); out.print(r1); out.print(F(" pin2 ")); out.println(r2);
+  const uint32_t n = 10000;
+  uint32_t bad1 = 0, bad2 = 0;
+  for (uint32_t i = 0; i < n; i++) {
+    if (abs(analogRead(p1) - r1) > 93) bad1++;  // 93 = 0.3 V in 10 bit
+    if (abs(analogRead(p2) - r2) > 93) bad2++;
+  }
+  out.print(F("analogRead alone alternated x")); out.print(n); out.print(F(": wrong pin1 ")); out.print(bad1);
+  out.print(F(" pin2 ")); out.println(bad2);
+  delay(20);
+}
+
 static void timeout_check(Print& out) {
   out.println(F("timeout check: ADC off, 3 reads (expect -1 x3 and one ERR message). Reset the board after."));
   delay(20);
@@ -140,13 +158,14 @@ static void timeout_check(Print& out) {
     eoc_before = 0; wait_turns = 0; delay(20);                                   \
   } while (0)
 
-// XA: everything below; XAS: stale value check only; XAT: timeout check (turns the ADC off: reset after; branch only,
+// XA: everything below; XAS: stale value check only; XAR: analogRead alone, then XAS; XAT: timeout check (turns the ADC off: reset after; branch only,
 // dev-gd32 waits forever)
 void adc_diag(Print& out, char sub) {
   if (motor.enabled) { out.println(F("Disable the motor first (ME0)")); return; }
   first_call(out);
   if (sub == 'S') { stale_check(out); return; }
   if (sub == 'T') { timeout_check(out); return; }
+  if (sub == 'R') { analogread_check(out); stale_check(out); return; }
   uint32_t empty = 0xFFFFFFFFu;
   for (int k = 0; k < N_DIAG; k++) { uint32_t t0 = prof_cycles(); uint32_t t = prof_cycles() - t0; if (t < empty) empty = t; }
   const int pin = BENCH_ADC_DIAG_PIN;
