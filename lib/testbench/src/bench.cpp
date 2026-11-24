@@ -617,6 +617,9 @@ static void doSafety(char* cmd) {
 #ifdef BENCH_MICROBENCH
     case 'B': prof_bench(bench_io); return;   // XB: micro benchmarks (motor disabled)
 #endif
+#ifdef BENCH_ADC_DIAG
+    case 'A': adc_diag(bench_io); return;     // XA: _readRegularADCVoltage steps (motor disabled)
+#endif
 #endif
     default: break;
   }

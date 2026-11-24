@@ -29,6 +29,7 @@ void prof_add(int part, uint32_t cycles);
 void prof_end_loop();
 void prof_print(Print& out);
 void prof_bench(Print& out);
+void adc_diag(Print& out);  // XA, adc_diag.cpp (-D BENCH_ADC_DIAG)
 #define PROF_T0()        uint32_t _pt = prof_cycles(), _pt0 = _pt
 #define PROF_LAP(part)   do { uint32_t _n = prof_cycles(); prof_add(part, _n - _pt); _pt = _n; } while (0)
 #define PROF_TOTAL()     do { prof_add(P_TOTAL, prof_cycles() - _pt0); prof_end_loop(); } while (0)
