@@ -1747,3 +1747,6 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Retry (Vbus 25.81 V): same AP error during the ME1 drive, at the first dbg reads; heartbeat stopped the motor, ME0
   Status 0 after reconnecting. Two in a row: SWD link vs motor currents. Stopped for the night (power test of #22 to
   redo once the ST-Link wiring is checked).
+- Last retry with the SWD clock at 1 MHz (BENCH_SWD_HZ, 7c6a775): same AP error at the first dbg read after ME1.
+  Systematic, not random. Changes since the good runs of 22/11: ST-Link wiring (E230 work), ST-Link firmware V2J37,
+  Rigol on USB (ground loop through its probe ground if still clipped on the board?). See simplefoc-work#47.
