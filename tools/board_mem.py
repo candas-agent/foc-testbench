@@ -5,6 +5,7 @@ Read the test bench variables from the board memory with pyOCD, through the ST-L
 The symbol addresses come from the firmware ELF (.pio/build/esc1/firmware.elf). The struct layouts below mirror
 lib/testbench/src/bench.h: update both together (DBG_MAGIC is checked).
 """
+import os
 import struct
 import time
 
@@ -41,7 +42,8 @@ class BoardMemory:
             print(mem.read_dbg())
     """
 
-    def __init__(self, elf_path, probe_id=None, frequency=4_000_000):
+    # SWD clock: BENCH_SWD_HZ (e.g. 1000000) when the motor currents disturb the link (simplefoc-work#47)
+    def __init__(self, elf_path, probe_id=None, frequency=int(os.environ.get("BENCH_SWD_HZ", 4_000_000))):
         # _SEGGER_RTT: RTT control block, only in the firmware built with BENCH_USE_RTT (GD32 board)
         self.sym = elf_symbols(elf_path, ["dbg", "rec_buf", "rec_n", "rec_running"], optional=["_SEGGER_RTT", "hall_edges", "hall_edge_n"])
         expected = struct.calcsize(DBG_FORMAT)
