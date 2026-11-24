@@ -1765,3 +1765,21 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Same 22/11 firmware again, owner watching the supply: **the supply was in current limit** during the run, and the
   link failed (AP error at line 88). Likely cause of the whole evening: the bus collapses in current limit (low iq at
   uq 4 V: the board assumes 26 V) and the ground/bus jumps break SWD. Current limit probably lowered on 23/11 (E230).
+
+### #22 power test done (supply limit back to 1 A), cloud 45485161661, 25.8 V, ol_run 1 A 2 rad/s 6 s + loop_time
+
+| | control (947a0a2) | adcpwr_dev (66eb425) | adcpwr_br (3d3dd26) |
+|---|---|---|---|
+| iq / id [A] | 1.000 / 0.002 | 1.000 / 0.000 | 1.004 / 0.004 |
+| uq / ud [V] | 1.447 / -0.493 | 1.431 / -0.530 | 1.447 / -0.487 |
+| ia / ib fundamental [A] | 1.003 / 0.982 | 1.017 / 0.932 | 1.022 / 0.957 |
+| peak [A] | 1.76 | 1.70 | 1.95 |
+| loopFOC avg / max [us] | - | 163.1 / 174.6 | 163.3 / 175.0 |
+| **total loop avg / max [us]** (Vbus + PB1 read every loop) | - | **1483.9 / 8679** | **508.5 / 579** |
+| Vbus run time, reads, errors | - | 25.90 V, 23822, 0 | 25.90 V, 65415, 0 |
+| PB1 wrong (stale) reads | - | 3 (0.013 %) | 16 (0.024 %, cumulative incl. rest) |
+
+- Currents identical. Loop 2.9x faster: ~145 us per read (br) vs ~630 us (dev), as the logic test.
+- Stale reads while the motor runs remain (~0.01-0.02 %, the 22/11 range was 0.02-0.05 %): not 0 as at rest. The
+  4-end argument assumes at most 2 injected groups and that an interrupted regular conversion restarts. Small counts.
+- No link error, no fault. Board back on gd32cl_6c. uq 1.45 V (vs 0.83 V on 18/11) in all three: not firmware.
