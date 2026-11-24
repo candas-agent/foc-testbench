@@ -1744,3 +1744,6 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
   `pyOCD TransferError: STLink error (18): AP error`; ME0 failed too (link lost), the heartbeat stopped the motor;
   a new connection then read ME0 Status 0, no fault. First run tonight with real phase current: SWD disturbed by the
   motor currents? (ST-Link wiring changed for the E230 boards on 23/11.) No measurement.
+- Retry (Vbus 25.81 V): same AP error during the ME1 drive, at the first dbg reads; heartbeat stopped the motor, ME0
+  Status 0 after reconnecting. Two in a row: SWD link vs motor currents. Stopped for the night (power test of #22 to
+  redo once the ST-Link wiring is checked).
