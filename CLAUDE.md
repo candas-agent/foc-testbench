@@ -1,8 +1,10 @@
 # FOC test bench - instructions for Claude
 
+@~/.claude/simplefoc-conventions.md
+
 Bench firmware and tools to measure SimpleFOC changes on hoverboard boards (see README.md). This repository holds
-code, tools and measurements only. Topics, priorities and decisions are tracked in the private repo
-Candas1/simplefoc-work (one issue per topic), not here. Traps of the tools and boards: docs/pitfalls.md.
+code, tools and measurements only; topics live in simplefoc-work issues. Traps of the tools and boards:
+docs/pitfalls.md.
 
 ## Safety rules
 - Never flash the board or start/enable the motor without the user's explicit confirmation in the current session,
@@ -33,8 +35,6 @@ Candas1/simplefoc-work (one issue per topic), not here. Traps of the tools and b
   F103: `.venv/Scripts/pyocd.exe flash -t stm32f103rc <elf>`. Only envs whose libraries are pushed.
 - Pin every library to the exact commit measured. Envs made for one PR can be removed once it is merged: the test
   log keeps the commits.
-- Comparisons: same bench firmware and flags on both sides, A/B alternated, loop time with `XP` / perf_run.py, flash
-  and RAM per symbol (library only).
 - "Same behaviour" claims: on-target test against dev (docs/equiv-tests.md), the dev build on both sides must give
   100 % identical results. `equiv_pwm_*` firmwares: main supply off only.
 - `XR1` (plain SimpleFOC) for bug reproduction, always `XR0` after.
