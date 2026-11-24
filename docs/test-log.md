@@ -1762,3 +1762,6 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
   same low iq at the voltage limit -> the bench changed since 22/11 (phase wiring or current sense), not the firmware.
   Link failures not reproduced with this firmware (one run). Motor runs stopped until the owner checks (supply current,
   wheel force, phase-phase resistance ~0.34 Ohm expected).
+- Same 22/11 firmware again, owner watching the supply: **the supply was in current limit** during the run, and the
+  link failed (AP error at line 88). Likely cause of the whole evening: the bus collapses in current limit (low iq at
+  uq 4 V: the board assumes 26 V) and the ground/bus jumps break SWD. Current limit probably lowered on 23/11 (E230).
