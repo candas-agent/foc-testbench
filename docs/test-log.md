@@ -1754,3 +1754,6 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
   first probe (or its V2J37 firmware). But gd32cl_6c, same run: **iq 0.43 A, uq pinned at 4.0 V**, ia / ib
   fundamental 0.43 / 0.36 A, peak 1.57 A, no fault (reference 18/11: iq 0.999 A at uq 0.83 V). ~10x the normal
   voltage for half the current: a phase badly connected (motor just reconnected)? Stopped, owner to check.
+- Phases reconnected, second ST-Link: **AP error again at the first dbg read after ME1** (ol_run.py line 88, so the
+  motor was enabled; heartbeat stopped it; ME0 Status 0 after reconnecting). The second probe only held while a phase
+  was badly connected (0.43 A): the link fails when the full phase current flows, with either probe -> not the probe.
