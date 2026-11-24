@@ -1676,3 +1676,30 @@ flashing). 72 MHz. PA4. Two runs each, identical within 1 cycle. Raw output: dat
 - Slow flash timings depend on the layout: adding XA code moved dev from 44.7k to 51k cycles per read (pinMode
   13k -> 23k, pin_in_pinmap 139 -> 4279). Compare only builds with the same layout.
 - First RTT attach after an OpenOCD flash can read dbg.magic 0 (start-up not finished): retry after ~3 s.
+
+## 2026-11-24 evening: #22 branch logic tests (candas-agent issue-22-gd32-regular-adc-fast 8d3104e)
+
+Cloud 45475203942 (dev) / 45475673639 (branch). 3.3 V only (Vbus 1.80-1.82 V), motor disabled. Same layout pairs:
+dev / br (gd32f130_mcu.cpp in the fast flash as the bench, core + SPL in the slow flash), fast / br_fast (core code in
+the fast flash too, SPL still slow). br_late = br without the start-up analogRead. Raw: data/2026-11-24_adcdiag/t_*.txt.
+
+| mean cycles | dev | br | fast | br_fast | br_late |
+|---|---|---|---|---|---|
+| `_readRegularADCVoltage` (same pin) | 66412 | **9115** | 11392 | **860** | 26383 |
+| pair PA4 + PB1 | 158496 | **22488** | 22946 | **1745** | 78354 |
+| analogRead | 64454 | 42599 | 11253 | 9166 | 57603 |
+| pin not analog: pinMode(INPUT) + read, minus pinMode | 70596 | 28396 | 13455 | 11701 | 43347 |
+| first call | - | - | - | - | 121652 (CTL1 0x9001 -> 0x1E9003, 0.063 V) |
+
+- **Our function: 0 wrong / 0 x -1 in 10000 alternated PA4/PB1 reads and in the series mixed with analogRead, in all
+  layouts** (references 0.062 / 1.97-1.98 V). XA twice on br: identical.
+- XAT (br, ADC off): -1 x3, one ERR message, 32118 cycles (446 us) per failing call; PB15 (not ADC): -1 + message.
+- Registers after the reads: CTL1 0x1E9003 unchanged, SAMPT0 0, SAMPT1 0x8001000 (7.5 cycles on ch4 and ch9 only).
+- Gain: 7.3x in the slow flash (127 us; plan expected < 1500 cycles), 13x when the core code is fast (12 us).
+  The remaining cycles in br are the SPL calls (adc_flag_get in the wait loop, channel config) and pinmap_function,
+  all in the slow flash; the layout still moves the numbers (br_late 26k).
+- **Side effect: the core's analogRead(PB1) interleaved with our reads of PA4 returned the PA4 value 3170/3334
+  (br_fast) and 3247/3334 (br_late) times, 0 in br, dev and fast.** analogRead reads RDATA right after its channel
+  write (EOC is set by the running conversions): it is right only if enough time passes in between, which depends on
+  the layout and on the ADC state left by the previous read. Same mechanism as get_adc_value pair 78/78 (fast builds).
+- bench-runner flashed once after a `nan` Vbus read (board at 3.3 V, 1.80 V just before and after): rule tightened.
