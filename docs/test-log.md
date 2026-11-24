@@ -1728,3 +1728,12 @@ XAR, the other three firmwares (owner confirmed 26 V off for the flash from adcd
 - dev-gd32's `_readRegularADCVoltage` (core path) is wrong ~98 % of the time as soon as the core code runs fast,
   like analogRead: confirms the diagnostic (right only because slow). The branch: 0 wrong in all 5 layouts.
 - Board back on gd32cl_6c (1.81 V).
+
+## 2026-11-24 night: #22 power test, stopped on dev-gd32 (no current)
+
+adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (25.96 V at start-up),
+`ol_run.py --mode current --current 1 --speed 2 --duration 6`: **iq 0.004 A, uq pinned at 4.0 V, ia/ib fundamental
+0.002 / 0.009 A, sensor angle frozen (rotor did not turn)**. Vbus run time 26.07 V, 32074 reads, 0 errors, PB1 1.975 V,
+0 stale. No fault. Raw: data/2026-11-24_adcpwr/. The branch was not run; board left on adcpwr_dev, motor disabled.
+- Not caused by #22 (dev-gd32 baseline). The board's known-good firmware gd32cl_6c uses e1f98f8; 66eb425 adds 4
+  commits incl. #37 (PHASE_HI / PHASE_LO drive one side only), never motor-tested here. To isolate before going on.
