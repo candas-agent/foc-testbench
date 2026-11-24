@@ -67,7 +67,7 @@ SECTIONS
     *SEGGER_RTT*.o(.text*)
     *RTTStream.cpp.o(.text*)
     /* adcdiag_fast (simplefoc-work#22): the steps of _readRegularADCVoltage in the fast flash */
-    *adc_diag.cpp.o(.text* .rodata*)
+    *adc_diag.cpp.o(.text*)
     *analog.cpp.o(.text*)
     *pinmap.c.o(.text*)
     *wiring_digital.c.o(.text*)
