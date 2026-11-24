@@ -1757,3 +1757,8 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Phases reconnected, second ST-Link: **AP error again at the first dbg read after ME1** (ol_run.py line 88, so the
   motor was enabled; heartbeat stopped it; ME0 Status 0 after reconnecting). The second probe only held while a phase
   was badly connected (0.43 A): the link fails when the full phase current flows, with either probe -> not the probe.
+- 22/11 firmware gd32drv_dev (947a0a2, iq 1.0 A on 22/11), same run: **the link held**, but **iq 0.42 A, uq 4.0 V**,
+  ia / ib 0.42 / 0.35 A, peak 1.44 A, no fault: same as gd32cl_6c with the "bad phase" (0.43 A). Two firmwares give the
+  same low iq at the voltage limit -> the bench changed since 22/11 (phase wiring or current sense), not the firmware.
+  Link failures not reproduced with this firmware (one run). Motor runs stopped until the owner checks (supply current,
+  wheel force, phase-phase resistance ~0.34 Ohm expected).
