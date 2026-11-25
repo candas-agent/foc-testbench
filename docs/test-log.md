@@ -1790,3 +1790,11 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
   code in pins and isset. No __aeabi_i2f / fcmp left in _readRegularADCVoltage, BLDCDriver6PWM::enable / init,
   _configure6PWM (still there with #595). loopFOC / move unchanged (float parameters).
 - Not measured on the bench yet.
+
+## 2026-11-25 - _isset overloads, loop time on the GD32F130 (Candas1/simplefoc-work#3)
+- gd32cl_6c (e1f98f8) vs gd32cl_6c_isset (e1f98f8 + overloads 0388054), cloud 45583309986, flash 47612 / 47348 B.
+- Owner's go, supply limit 1 A, probe 530066000700004E51544E4E (54FF... removed after a hung SWD read).
+  loop_time.py current 1 A 2 rad/s, A B A B, 5 reads each, Vbus 25.8 V, no fault, iq 0.7-1.35 A, uq 1.3-1.8 V.
+- loopFOC 163.0 -> 159.25 us (-3.75 us, -2.3 %); bench debug part (one extra getPhaseCurrents) 20.8 -> 17.1 us;
+  other parts unchanged; TOTAL 207.5 -> 200.0 us (-3.6 %). Raw: data/2026-11-25_isset/ (local).
+- The gain here is the getPhaseCurrents part (same as simplefoc#595); the other fixed calls are not in this loop.
