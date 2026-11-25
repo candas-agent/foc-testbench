@@ -1783,3 +1783,10 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - Stale reads while the motor runs remain (~0.01-0.02 %, the 22/11 range was 0.02-0.05 %): not 0 as at rest. The
   4-end argument assumes at most 2 injected groups and that an interrupted regular conversion restarts. Small counts.
 - No link error, no fault. Board back on gd32cl_6c. uq 1.45 V (vs 0.83 V on 18/11) in all three: not firmware.
+
+## 2026-11-25 - _isset overloads vs simplefoc#595 (code only, Candas1/simplefoc-work#3)
+- Cloud build 45580002625, envs perf_dev_f103 (ae7b3ad) / perf_pins_f103 (d88e569) / perf_isset_f103 (61cfdbd).
+- Flash 90300 / 90180 / 90020 B, RAM unchanged. getPhaseCurrents and _readADCInjectedChannelVoltage: same machine
+  code in pins and isset. No __aeabi_i2f / fcmp left in _readRegularADCVoltage, BLDCDriver6PWM::enable / init,
+  _configure6PWM (still there with #595). loopFOC / move unchanged (float parameters).
+- Not measured on the bench yet.
