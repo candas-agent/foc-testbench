@@ -1806,3 +1806,8 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - The Vbus read is outside the profiled parts (only in TOTAL): TOTAL minus the parts = A 47.0 / B 47.4 / C 45.5 us,
   per run 47.0-47.0 / 47.5-47.4 / 45.4-45.5: **C -2.0 us per read vs #595** (the int adc_index compared to NOT_SET).
 - Moved since: board power button bridge was missing at first. Rest currents ~-12 A are normal (R_ds_on, pitfalls).
+
+## 2026-11-25 - Oscilloscope over LAN
+- Rigol (DS1104Z firmware 00.04.05.SP2) on the USB-Ethernet adapter (ASIX AX88179, direct cable, 100 Mbps), Auto-IP
+  169.254.58.172, raw socket port 5555 (pyvisa `TCPIP0::169.254.58.172::5555::SOCKET`).
+- Screen waveform download (CH1, NORM, BYTE, 1200 points): **20/20 OK, 15 ms each** (USB: 2/20).
