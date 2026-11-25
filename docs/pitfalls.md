@@ -38,6 +38,8 @@ Traps that cost time on this bench, with the way around them. One line each; det
 - GD32 core `micros()` can go back by up to 1 ms: `gd32_micros.c` on the bench.
 - GD32F130 `analogRead` / `_readRegularADCVoltage` ≈ 0.8 ms per read (slow flash): never every loop.
 - STM32F103 on hoverboards runs at 64 MHz (HSI, no crystal), not 72.
+- F103 board at rest (driver disabled): the R_ds_on current sense reads ~-11 to -12 A (MOSFETs off), and `dbg.vbus` is
+  NaN (no start-up read, the run-time PC2 read is printed by `X`). Neither is a fault; check currents while running.
 - STM32F1 + SimpleFOC dev: no `SIMPLEFOC_STM32_ADC_INTERRUPT` (currents freeze, simplefoc#594).
 - `_sin` / `_cos` of a negative angle return 0 on STM32 (dev): open loop with a negative angle applies no voltage.
 - In trapezoidal modes the R_ds_on reading of the floating phase means nothing: the bench overcurrent cut trips.
