@@ -1798,3 +1798,11 @@ adcpwr_dev (Candas1 dev-gd32 66eb425, Vbus PA4 + PB1 read at every loop), 26 V (
 - loopFOC 163.0 -> 159.25 us (-3.75 us, -2.3 %); bench debug part (one extra getPhaseCurrents) 20.8 -> 17.1 us;
   other parts unchanged; TOTAL 207.5 -> 200.0 us (-3.6 %). Raw: data/2026-11-25_isset/ (local).
 - The gain here is the getPhaseCurrents part (same as simplefoc#595); the other fixed calls are not in this loop.
+
+## 2026-11-25 - _isset overloads, Vbus read at every loop on the F103 (Candas1/simplefoc-work#3)
+- Envs perf_vbus_{dev,pins,isset}_f103 (cloud 45588753633, -D BENCH_VBUS_RUNTIME_MS=0: _readRegularADCVoltage(PC2)
+  at every loop), owner's go, 26 V / 1 A, perf_run.py 2 rad/s, A B C A B C, no fault, Vbus 25.8-26.5 V, 0 read errors.
+- loopFOC A 297.4 / B (#595) 290.0 / C (overloads) 289.7 us; TOTAL 474.3 / 459.7 / 457.3 us.
+- The Vbus read is outside the profiled parts (only in TOTAL): TOTAL minus the parts = A 47.0 / B 47.4 / C 45.5 us,
+  per run 47.0-47.0 / 47.5-47.4 / 45.4-45.5: **C -2.0 us per read vs #595** (the int adc_index compared to NOT_SET).
+- Moved since: board power button bridge was missing at first. Rest currents ~-12 A are normal (R_ds_on, pitfalls).
