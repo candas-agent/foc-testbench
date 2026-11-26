@@ -15,6 +15,8 @@ Traps that cost time on this bench, with the way around them. One line each; det
   Unplug the Rigol USB, or write the variables with OpenOCD `mww`.
 - **Scope ground**: the GND pin of the split board serial connector is not a clean ground for the scope (1.8 V of
   noise against the SWD G). Clip on a sure ground; check it first by reading the 3.3 V pin (flat 3.3 V expected).
+- **ST-Link 54FF67065072495023531087**: a SWD read hung on it (25/11), so it was removed from the bench. Use the
+  530066000700004E51544E4E probe; check which one pyOCD lists before flashing.
 - Only one tool on the ST-Link at a time (pyOCD, OpenOCD or an upload).
 - Disconnect the ST-Link 3.3 V when the board is supplied.
 - GD32F130 bus voltage is read at start-up only: when the 26 V arrives with the board already on, reset by software
