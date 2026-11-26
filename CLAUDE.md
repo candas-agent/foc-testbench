@@ -4,7 +4,7 @@
 
 Bench firmware and tools to measure SimpleFOC changes on hoverboard boards (see README.md). This repository holds
 code, tools and measurements only; topics live in simplefoc-work issues. Traps of the tools and boards:
-docs/pitfalls.md.
+docs/pitfalls.md. Tools index: tools/README.md (check it before a multi-step procedure).
 
 ## Safety rules
 - Never flash the board or start/enable the motor without the user's explicit confirmation in the current session,
